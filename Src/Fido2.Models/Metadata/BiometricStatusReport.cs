@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -14,7 +13,7 @@ public class BiometricStatusReport
     /// <summary>
     /// Gets or sets the level of the biometric certification of this biometric component of the authenticator.
     /// </summary>
-    [JsonPropertyName("certLevel"), Required]
+    [JsonProperty("certLevel", Required = Required.Always)]
     public ushort CertLevel { get; set; }
     /// <summary>
     /// Gets or sets a single USER_VERIFY constant indicating the modality of the biometric component.
@@ -23,26 +22,26 @@ public class BiometricStatusReport
     /// This is not a bit flag combination. 
     /// This value MUST be non-zero and this value MUST correspond to one or more entries in field userVerificationDetails in the related Metadata Statement.
     /// </remarks>
-    [JsonPropertyName("modality"), Required]
+    [JsonProperty("modality", Required = Required.Always)]
     public ulong Modality { get; set; }
 
     /// <summary>
     /// Gets or sets a ISO-8601 formatted date since when the certLevel achieved, if applicable. 
     /// <para>If no date is given, the status is assumed to be effective while present.</para>
     /// </summary>
-    [JsonPropertyName("effectiveDate")]
+    [JsonProperty("effectiveDate")]
     public string EffectiveDate { get; set; }
 
     /// <summary>
     /// Gets or sets the externally visible aspects of the Biometric Certification evaluation.
     /// </summary>
-    [JsonPropertyName("certificationDescriptor")]
+    [JsonProperty("certificationDescriptor")]
     public string CertificationDescriptor { get; set; }
 
     /// <summary>
     /// Gets or sets the unique identifier for the issued Biometric Certification.
     /// </summary>
-    [JsonPropertyName("certificateNumber")]
+    [JsonProperty("certificateNumber")]
     public string CertificateNumber { get; set; }
 
     /// <summary>
@@ -51,7 +50,7 @@ public class BiometricStatusReport
     /// <remarks>
     /// For example: "1.0.0".
     /// </remarks>
-    [JsonPropertyName("certificationPolicyVersion")]
+    [JsonProperty("certificationPolicyVersion")]
     public string CertificationPolicyVersion { get; set; }
 
     /// <summary>
@@ -60,6 +59,6 @@ public class BiometricStatusReport
     /// <remarks>
     /// For example: "1.0.0".
     /// </remarks>
-    [JsonPropertyName("certificationRequirementsVersion")]
+    [JsonProperty("certificationRequirementsVersion")]
     public string CertificationRequirementsVersion { get; set; }
 }

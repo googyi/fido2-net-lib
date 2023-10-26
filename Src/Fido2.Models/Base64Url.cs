@@ -7,7 +7,7 @@ namespace Fido2NetLib;
 /// <summary>
 /// Helper class to handle Base64Url. Based on Carbon.Jose source code.
 /// </summary>
-public static class Base64Url
+public static class Base64Url // TODO : cleanup not used stuff
 {
     /// <summary>
     /// Converts arg data to a Base64Url encoded string.
@@ -18,7 +18,8 @@ public static class Base64Url
 
         char[] pooledBuffer = ArrayPool<char>.Shared.Rent(base64Length);
 
-        Convert.TryToBase64Chars(arg, pooledBuffer, out int encodedLength);
+        //Convert.TryToBase64Chars(arg, pooledBuffer, out int encodedLength);
+        int encodedLength = Convert.ToBase64CharArray(arg.ToArray(), 0, arg.Length, pooledBuffer, 0);
 
         Span<char> base64Url = pooledBuffer.AsSpan(0, encodedLength);
 
@@ -44,11 +45,22 @@ public static class Base64Url
             base64Url = base64Url.Slice(0, equalIndex);
         }
 
-        var result = new string(base64Url);
+        var result = new string(base64Url.ToArray());
 
         ArrayPool<char>.Shared.Return(pooledBuffer, clearArray: true);
 
         return result;
+    }
+
+    public static string Encode(byte[] arg)
+    {
+        string s = Convert.ToBase64String(arg); // Standard base64 encoder
+
+        s = s.Split('=')[0]; // Remove any trailing '='s
+        s = s.Replace('+', '-'); // 62nd char of encoding
+        s = s.Replace('/', '_'); // 63rd char of encoding
+
+        return s;
     }
 
     /// <summary>
@@ -155,5 +167,33 @@ public static class Base64Url
         ArrayPool<byte>.Shared.Return(buffer, true);
 
         return result;
+    }
+
+    public static byte[] Decode(string arg)
+    {
+        if (arg is null)
+        {
+            throw new ArgumentNullException(nameof(arg));
+        }
+
+        string s = arg;
+        s = s.Replace('-', '+'); // 62nd char of encoding
+        s = s.Replace('_', '/'); // 63rd char of encoding
+
+        switch (s.Length % 4) // Pad with trailing '='s
+        {
+            case 0:
+                break; // No pad chars in this case
+            case 2:
+                s += "==";
+                break; // Two pad chars
+            case 3:
+                s += "=";
+                break; // One pad char
+            default:
+                throw new FormatException("The provided input is not valid base64 encoded string.");
+        }
+
+        return Convert.FromBase64String(s); // Standard base64 decoder
     }
 }

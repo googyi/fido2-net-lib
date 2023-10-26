@@ -1,6 +1,5 @@
 ﻿using System;
-using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -15,7 +14,7 @@ public class MetadataStatement
     /// <summary>
     /// Gets or sets the legalHeader, if present, contains a legal guide for accessing and using metadata, which itself MAY contain URL(s) pointing to further information, such as a full Terms and Conditions statement. 
     /// </summary>
-    [JsonPropertyName("legalHeader")]
+    [JsonProperty("legalHeader")]
     public string LegalHeader { get; set; }
 
     /// <summary>
@@ -24,7 +23,7 @@ public class MetadataStatement
     /// <remarks>
     /// Note: FIDO UAF Authenticators support AAID, but they don't support AAGUID.
     /// </remarks>
-    [JsonPropertyName("aaid")]
+    [JsonProperty("aaid")]
     public string Aaid { get; set; }
 
     /// <summary>
@@ -34,63 +33,63 @@ public class MetadataStatement
     /// This field MUST be set if the authenticator implements FIDO 2. 
     /// <para>Note: FIDO 2 Authenticators support AAGUID, but they don't support AAID.</para>
     /// </remarks>
-    [JsonPropertyName("aaguid")]
+    [JsonProperty("aaguid")]
     public Guid? AaGuid { get; set; }
 
     /// <summary>
     /// Gets or sets a list of the attestation certificate public key identifiers encoded as hex string.
     /// </summary>
-    [JsonPropertyName("attestationCertificateKeyIdentifiers")]
+    [JsonProperty("attestationCertificateKeyIdentifiers")]
     public string[] AttestationCertificateKeyIdentifiers { get; set; }
 
     /// <summary>
     /// Gets or sets a human-readable, short description of the authenticator, in English. 
     /// </summary>
-    [JsonPropertyName("description"), Required]
+    [JsonProperty("description", Required = Required.Always)]
     public string Description { get; set; }
 
     /// <summary>
     /// Gets or set a list of human-readable short descriptions of the authenticator in different languages.
     /// </summary>
-    [JsonPropertyName("alternativeDescriptions")]
+    [JsonProperty("alternativeDescriptions")]
     public AlternativeDescriptions IETFLanguageCodesMembers { get; set; }
 
     /// <summary>
     /// Gets or set earliest (i.e. lowest) trustworthy authenticatorVersion meeting the requirements specified in this metadata statement. 
     /// </summary>
-    [JsonPropertyName("authenticatorVersion"), Required]
+    [JsonProperty("authenticatorVersion", Required = Required.Always)]
     public ulong AuthenticatorVersion { get; set; }
 
     /// <summary>
     /// Gets or set the FIDO protocol family.
     /// <para>The values "uaf", "u2f", and "fido2" are supported.</para>
     /// </summary>
-    [JsonPropertyName("protocolFamily"), Required]
+    [JsonProperty("protocolFamily", Required = Required.Always)]
     public string ProtocolFamily { get; set; }
 
     /// <summary>
     /// The Metadata Schema version
     /// Metadata schema version defines what schema of the metadata statement is currently present.The schema version of this version of the specification is 3.
     /// </summary>
-    [JsonPropertyName("schema"), Required]
+    [JsonProperty("schema", Required = Required.Always)]
     public ushort Schema { get; set; }
 
     /// <summary>
     /// Gets or sets the FIDO unified protocol version(s) (related to the specific protocol family) supported by this authenticator.
     /// </summary>
-    [JsonPropertyName("upv"), Required]
+    [JsonProperty("upv", Required = Required.Always)]
     public UafVersion[] Upv { get; set; }
 
     /// <summary>
     /// Gets or sets the list of authentication algorithms supported by the authenticator. 
     /// </summary>
-    [JsonPropertyName("authenticationAlgorithms"), Required]
+    [JsonProperty("authenticationAlgorithms", Required = Required.Always)]
     public string[] AuthenticationAlgorithms { get; set; }
 
     /// <summary>
     /// Gets or sets the list of public key formats supported by the authenticator during registration operations.
     /// </summary>
-    [JsonPropertyName("publicKeyAlgAndEncodings"), Required]
+    [JsonProperty("publicKeyAlgAndEncodings", Required = Required.Always)]
     public string[] PublicKeyAlgAndEncodings { get; set; }
     /// <summary>
     /// Gets or sets the supported attestation type(s).
@@ -98,19 +97,19 @@ public class MetadataStatement
     /// <remarks>
     /// For example: TAG_ATTESTATION_BASIC_FULL(0x3E07), TAG_ATTESTATION_BASIC_SURROGATE(0x3E08). 
     /// </remarks>
-    [JsonPropertyName("attestationTypes"), Required]
+    [JsonProperty("attestationTypes", Required = Required.Always)]
     public string[] AttestationTypes { get; set; }
 
     /// <summary>
     /// Gets or sets a list of alternative VerificationMethodANDCombinations.
     /// </summary>
-    [JsonPropertyName("userVerificationDetails"), Required]
+    [JsonProperty("userVerificationDetails", Required = Required.Always)]
     public VerificationMethodDescriptor[][] UserVerificationDetails { get; set; }
 
     /// <summary>
     /// Gets or sets a 16-bit number representing the bit fields defined by the KEY_PROTECTION constants.
     /// </summary>
-    [JsonPropertyName("keyProtection"), Required]
+    [JsonProperty("keyProtection", Required = Required.Always)]
     public string[] KeyProtection { get; set; }
 
     /// <summary>
@@ -123,74 +122,74 @@ public class MetadataStatement
     ///     <item>If this field is missing, the assumed value is isKeyRestricted=true.</item>
     /// </list>
     /// </remarks>
-    [JsonPropertyName("isKeyRestricted")]
+    [JsonProperty("isKeyRestricted")]
     public bool IsKeyRestricted { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether the Uauth key usage always requires a fresh user verification.
     /// </summary>
-    [JsonPropertyName("isFreshUserVerificationRequired")]
+    [JsonProperty("isFreshUserVerificationRequired")]
     public bool IsFreshUserVerificationRequired { get; set; }
 
     /// <summary>
     /// Gets or sets a 16-bit number representing the bit fields defined by the MATCHER_PROTECTION constants.
     /// </summary>
-    [JsonPropertyName("matcherProtection"), Required]
+    [JsonProperty("matcherProtection", Required = Required.Always)]
     public string[] MatcherProtection { get; set; }
 
     /// <summary>
     /// Gets or sets the authenticator's overall claimed cryptographic strength in bits (sometimes also called security strength or security level).
     /// </summary>
     /// <remarks>If this value is absent, the cryptographic strength is unknown.</remarks>
-    [JsonPropertyName("cryptoStrength")]
+    [JsonProperty("cryptoStrength")]
     public ushort CryptoStrength { get; set; }
 
     /// <summary>
     /// Gets or sets a 32-bit number representing the bit fields defined by the ATTACHMENT_HINT constants.
     /// </summary>
-    [JsonPropertyName("attachmentHint")]
+    [JsonProperty("attachmentHint")]
     public string[] AttachmentHint { get; set; }
 
     /// <summary>
     /// Gets or sets a 16-bit number representing a combination of the bit flags defined by the TRANSACTION_CONFIRMATION_DISPLAY constants.
     /// </summary>
-    [JsonPropertyName("tcDisplay"), Required]
+    [JsonProperty("tcDisplay", Required = Required.Always)]
     public string[] TcDisplay { get; set; }
 
     /// <summary>
     /// Gets or sets the supported MIME content type [RFC2049] for the transaction confirmation display, such as text/plain or image/png. 
     /// </summary>
-    [JsonPropertyName("tcDisplayContentType")]
+    [JsonProperty("tcDisplayContentType")]
     public string TcDisplayContentType { get; set; }
 
     /// <summary>
     /// Gets or sets a list of alternative DisplayPNGCharacteristicsDescriptor.
     /// </summary>
-    [JsonPropertyName("tcDisplayPNGCharacteristics")]
+    [JsonProperty("tcDisplayPNGCharacteristics")]
     public DisplayPNGCharacteristicsDescriptor[] TcDisplayPNGCharacteristics { get; set; }
 
     /// <summary>
     /// Gets or sets a list of a PKIX [RFC5280] X.509 certificate that is a valid trust anchor for this authenticator model.
     /// </summary>
-    [JsonPropertyName("attestationRootCertificates"), Required]
+    [JsonProperty("attestationRootCertificates", Required = Required.Always)]
     public string[] AttestationRootCertificates { get; set; }
 
     /// <summary>
     /// Gets or set a list of trust anchors used for ECDAA attestation. 
     /// </summary>
-    [JsonPropertyName("ecdaaTrustAnchors")]
+    [JsonProperty("ecdaaTrustAnchors")]
     public EcdaaTrustAnchor[] EcdaaTrustAnchors { get; set; }
 
     /// <summary>
     /// Gets or set a data: url [RFC2397] encoded PNG [PNG] icon for the Authenticator.
     /// </summary>
-    [JsonPropertyName("icon")]
+    [JsonProperty("icon")]
     public string Icon { get; set; }
 
     /// <summary>
     /// Gets or sets a list of extensions supported by the authenticator. 
     /// </summary>
-    [JsonPropertyName("supportedExtensions")]
+    [JsonProperty("supportedExtensions")]
     public ExtensionDescriptor[] SupportedExtensions { get; set; }
 
     /// <summary>

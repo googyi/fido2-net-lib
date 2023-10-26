@@ -1,6 +1,5 @@
 ﻿using System;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -9,20 +8,41 @@ namespace Fido2NetLib;
 /// </summary>
 public sealed class Base64UrlConverter : JsonConverter<byte[]>
 {
-    public override byte[] Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    private readonly Required _requirement = Required.DisallowNull;
+
+    public Base64UrlConverter()
     {
-        if (!reader.HasValueSequence)
-        {
-            return Base64Url.DecodeUtf8(reader.ValueSpan);
-        }
-        else
-        {
-            return Base64Url.Decode(reader.GetString());
-        }
     }
 
-    public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options)
+    public Base64UrlConverter(Required required = Required.DisallowNull)
     {
-        writer.WriteStringValue(Base64Url.Encode(value));
+        _requirement = required;
+    }
+
+    public override void WriteJson(JsonWriter writer, byte[] value, JsonSerializer serializer)
+    {
+        writer.WriteValue(Base64Url.Encode(value));
+    }
+
+    public override byte[] ReadJson(JsonReader reader, Type objectType, byte[] existingValue, bool hasExistingValue, JsonSerializer serializer)
+    {
+        byte[] ret = null;
+
+        if (null == reader.Value && _requirement == Required.AllowNull)
+            return ret;
+
+        if (null == reader.Value)
+            throw new Fido2VerificationException("json value must not be null");
+        if (Type.GetType("System.String") != reader.ValueType)
+            throw new Fido2VerificationException("json valuetype must be string");
+        try
+        {
+            ret = Base64Url.Decode((string)reader.Value);
+        }
+        catch (FormatException ex)
+        {
+            throw new Fido2VerificationException("json value must be valid base64 encoded string", ex);
+        }
+        return ret;
     }
 }
