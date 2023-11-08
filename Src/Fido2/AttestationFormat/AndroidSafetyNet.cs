@@ -8,11 +8,12 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using Fido2NetLib.Internal;
 
 using Microsoft.IdentityModel.Tokens;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
@@ -27,13 +28,15 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
         // (handled in base class)
 
         // 2. Verify that response is a valid SafetyNet response of version ver
-        if (!request.TryGetVer(out string? ver))
+        if (!request.TryGetVer(out string ver))
         {
             throw new Fido2VerificationException(Fido2ErrorMessages.InvalidSafetyNetVersion);
         }
 
-        if (!(request.AttStmt["response"] is CborByteString { Length: > 0 } responseByteString))
+        if (request.AttStmt["response"].Type != CBORType.ByteString || request.AttStmt["response"].GetByteString().Length == 0)
             throw new Fido2VerificationException(Fido2ErrorMessages.InvalidSafetyNetResponse);
+
+        var responseByteString = request.AttStmt["response"].GetByteString();
 
         var responseJwt = Encoding.UTF8.GetString(responseByteString);
 
@@ -109,7 +112,7 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
             throw new Fido2VerificationException("SafetyNet response security token validation failed", ex);
         }
 
-        string? nonce = null;
+        string nonce = null;
         bool? ctsProfileMatch = null;
         DateTimeOffset? timestamp = null;
 
@@ -127,7 +130,7 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
             }
             if (claim is { Type: "timestampMs", ValueType: "http://www.w3.org/2001/XMLSchema#integer64" })
             {
-                timestamp = DateTimeOffset.UnixEpoch.AddMilliseconds(double.Parse(claim.Value, CultureInfo.InvariantCulture));
+                timestamp = DateTimeHelper.UnixEpoch.AddMilliseconds(double.Parse(claim.Value, CultureInfo.InvariantCulture));
             }
         }
 
@@ -158,11 +161,11 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
         }
 
         Span<byte> dataHash = stackalloc byte[32];
-        SHA256.HashData(request.Data, dataHash);
+        dataHash = CryptoUtils.HashData(HashAlgorithmName.SHA256, request.Data);
 
         if (!dataHash.SequenceEqual(nonceHash))
         {
-            throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, $"SafetyNet response nonce / hash value mismatch, nonce {Convert.ToHexString(nonceHash)}, hash {Convert.ToHexString(dataHash)}");
+            throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, $"SafetyNet response nonce / hash value mismatch, nonce {HexConverter.HexToString(nonceHash)}, hash {HexConverter.HexToString(dataHash.ToArray())}");
         }
 
         // 4. Let attestationCert be the attestation certificate

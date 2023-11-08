@@ -39,15 +39,15 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
 
     private readonly string _getEndpointsUrl = "https://mds3.fido.tools/getEndpoints";
 
-    public ConformanceMetadataRepository(HttpClient? client, string origin)
+    public ConformanceMetadataRepository(HttpClient client, string origin)
     {
         _httpClient = client ?? new HttpClient();
         _origin = origin;
     }
 
-    public Task<MetadataStatement?> GetMetadataStatementAsync(MetadataBLOBPayload blob, MetadataBLOBPayloadEntry entry, CancellationToken cancellationToken = default)
+    public Task<MetadataStatement> GetMetadataStatementAsync(MetadataBLOBPayload blob, MetadataBLOBPayloadEntry entry, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<MetadataStatement?>(entry.MetadataStatement);
+        return Task.FromResult<MetadataStatement>(entry.MetadataStatement);
     }
 
     public async Task<MetadataBLOBPayload> GetBLOBAsync(CancellationToken cancellationToken = default)
@@ -66,56 +66,58 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
             throw new Exception($"{_getEndpointsUrl} returned {response.StatusCode} error");
         }
 
-        await using var responseStream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        MDSGetEndpointResponse? result = await JsonSerializer.DeserializeAsync(responseStream, FidoSerializerContext.Default.MDSGetEndpointResponse, cancellationToken);
-        var conformanceEndpoints = result!.Result;
+        using (var responseStream = await response.Content.ReadAsStreamAsync())
+        { 
+            MDSGetEndpointResponse result = await JsonSerializer.DeserializeAsync(responseStream, FidoSerializerContext.Default.MDSGetEndpointResponse, cancellationToken);
+            var conformanceEndpoints = result!.Result;
 
-        var combinedBlob = new MetadataBLOBPayload
-        {
-            Number = -1,
-            NextUpdate = "2099-08-07"
-        };
-
-        var entries = new List<MetadataBLOBPayloadEntry>();
-
-        foreach (var blobUrl in conformanceEndpoints)
-        {
-            var rawBlob = await DownloadStringAsync(blobUrl, cancellationToken);
-
-            MetadataBLOBPayload blob;
-
-            try
+            var combinedBlob = new MetadataBLOBPayload
             {
-                blob = await DeserializeAndValidateBlobAsync(rawBlob, cancellationToken);
-            }
-            catch
+                Number = -1,
+                NextUpdate = "2099-08-07"
+            };
+
+            var entries = new List<MetadataBLOBPayloadEntry>();
+
+            foreach (var blobUrl in conformanceEndpoints)
             {
-                continue;
+                var rawBlob = await DownloadStringAsync(blobUrl);
+
+                MetadataBLOBPayload blob;
+
+                try
+                {
+                    blob = await DeserializeAndValidateBlobAsync(rawBlob, cancellationToken);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (string.Compare(blob.NextUpdate, combinedBlob.NextUpdate, StringComparison.InvariantCulture) < 0)
+                    combinedBlob.NextUpdate = blob.NextUpdate;
+
+                if (combinedBlob.Number < blob.Number)
+                    combinedBlob.Number = blob.Number;
+
+                entries.AddRange(blob.Entries);
+
+                combinedBlob.JwtAlg = blob.JwtAlg;
             }
-
-            if (string.Compare(blob.NextUpdate, combinedBlob.NextUpdate, StringComparison.InvariantCulture) < 0)
-                combinedBlob.NextUpdate = blob.NextUpdate;
-
-            if (combinedBlob.Number < blob.Number)
-                combinedBlob.Number = blob.Number;
-
-            entries.AddRange(blob.Entries);
-
-            combinedBlob.JwtAlg = blob.JwtAlg;
+        
+            combinedBlob.Entries = entries.ToArray();
+            return combinedBlob;
         }
-
-        combinedBlob.Entries = entries.ToArray();
-        return combinedBlob;
     }
 
-    private Task<string> DownloadStringAsync(string url, CancellationToken cancellationToken)
+    private Task<string> DownloadStringAsync(string url)
     {
-        return _httpClient.GetStringAsync(url, cancellationToken);
+        return _httpClient.GetStringAsync(url);
     }
 
-    private Task<byte[]> DownloadDataAsync(string url, CancellationToken cancellationToken)
+    private Task<byte[]> DownloadDataAsync(string url)
     {
-        return _httpClient.GetByteArrayAsync(url, cancellationToken);
+        return _httpClient.GetByteArrayAsync(url);
     }
 
     public async Task<MetadataBLOBPayload> DeserializeAndValidateBlobAsync(string rawBLOBJwt, CancellationToken cancellationToken = default)
@@ -203,18 +205,18 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
                 if (element.Certificate.Issuer != element.Certificate.Subject)
                 {
                     var cdp = CryptoUtils.CDPFromCertificateExts(element.Certificate.Extensions);
-                    var crlFile = await DownloadDataAsync(cdp, cancellationToken);
+                    var crlFile = await DownloadDataAsync(cdp);
                     if (CryptoUtils.IsCertInCRL(crlFile, element.Certificate))
                         throw new Fido2VerificationException($"Cert {element.Certificate.Subject} found in CRL {cdp}");
                 }
             }
 
             // otherwise we have to manually validate that the root in the chain we are testing is the root we downloaded
-            if (rootCert.Thumbprint.Equals(certChain.ChainElements[^1].Certificate.Thumbprint, StringComparison.Ordinal) &&
+            if (rootCert.Thumbprint.Equals(certChain.ChainElements[certChain.ChainElements.Count-1].Certificate.Thumbprint, StringComparison.Ordinal) &&
                 // and that the number of elements in the chain accounts for what was in x5c plus the root we added
                 certChain.ChainElements.Count == (x5cRawKeys.Length + 1) &&
                 // and that the root cert has exactly one status with the value of UntrustedRoot
-                certChain.ChainElements[^1].ChainElementStatus is [{ Status: X509ChainStatusFlags.UntrustedRoot }])
+                certChain.ChainElements[certChain.ChainElements.Count - 1].ChainElementStatus[0].Status == X509ChainStatusFlags.UntrustedRoot)
             {
                 // if we are good so far, that is a good sign
                 certChainIsValid = true;
@@ -232,7 +234,7 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
 
         var blobPayload = ((JwtSecurityToken)validatedToken).Payload.SerializeToJson();
 
-        MetadataBLOBPayload blob = JsonSerializer.Deserialize(blobPayload, FidoModelSerializerContext.Default.MetadataBLOBPayload)!;
+        MetadataBLOBPayload blob = JsonSerializer.Deserialize<MetadataBLOBPayload>(blobPayload)!;
         blob.JwtAlg = blobAlg;
         return blob;
     }

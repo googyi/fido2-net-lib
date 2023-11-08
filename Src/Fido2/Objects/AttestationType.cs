@@ -38,12 +38,12 @@ public sealed class AttestationType : IEquatable<AttestationType>
         return !(e1 == e2);
     }
 
-    public override bool Equals(object? obj)
+    public override bool Equals(object obj)
     {
         return obj is AttestationType other && Equals(other);
     }
 
-    public bool Equals(AttestationType? other)
+    public bool Equals(AttestationType other)
     {
         if (ReferenceEquals(this, other))
             return true;

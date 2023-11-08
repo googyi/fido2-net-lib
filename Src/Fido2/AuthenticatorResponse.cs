@@ -32,7 +32,7 @@ public class AuthenticatorResponse
         // 2. Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext
         // Note: C may be any implementation-specific data structure representation, as long as C’s components are referenceable, as required by this algorithm.
         // We call this AuthenticatorResponse
-        AuthenticatorResponse? response;
+        AuthenticatorResponse response;
         try
         {
             response = JsonSerializer.Deserialize(utf8EncodedJson, FidoSerializerContext.Default.AuthenticatorResponse);
@@ -62,7 +62,7 @@ public class AuthenticatorResponse
     [JsonPropertyName("origin")]
     public string Origin { get; }
 
-    protected void BaseVerify(IReadOnlySet<string> fullyQualifiedExpectedOrigins, ReadOnlySpan<byte> originalChallenge)
+    protected void BaseVerify(IReadOnlyCollection<string> fullyQualifiedExpectedOrigins, ReadOnlySpan<byte> originalChallenge)
     {
         if (Type is not "webauthn.create" && Type is not "webauthn.get")
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAuthenticatorResponse, $"Type must be 'webauthn.create' or 'webauthn.get'. Was '{Type}'");

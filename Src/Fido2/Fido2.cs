@@ -13,14 +13,23 @@ namespace Fido2NetLib;
 public class Fido2 : IFido2
 {
     private readonly Fido2Configuration _config;
-    private readonly IMetadataService? _metadataService;
+    private readonly IMetadataService _metadataService;
+    private readonly RandomNumberGenerator _crypto;
 
     public Fido2(
         Fido2Configuration config,
-        IMetadataService? metadataService = null)
+        IMetadataService metadataService = null)
     {
         _config = config;
         _metadataService = metadataService;
+        _crypto = RandomNumberGenerator.Create();
+    }
+
+    private byte[] GetRandomBytes(int byteArrayLength)
+    {
+        var bytes = new byte[byteArrayLength];
+        _crypto.GetBytes(bytes);
+        return bytes;
     }
 
     /// <summary>
@@ -31,7 +40,7 @@ public class Fido2 : IFido2
     public CredentialCreateOptions RequestNewCredential(
         Fido2User user,
         List<PublicKeyCredentialDescriptor> excludeCredentials,
-        AuthenticationExtensionsClientInputs? extensions = null)
+        AuthenticationExtensionsClientInputs extensions = null)
     {
         return RequestNewCredential(user, excludeCredentials, AuthenticatorSelection.Default, AttestationConveyancePreference.None, extensions);
     }
@@ -47,10 +56,9 @@ public class Fido2 : IFido2
         List<PublicKeyCredentialDescriptor> excludeCredentials,
         AuthenticatorSelection authenticatorSelection,
         AttestationConveyancePreference attestationPreference,
-        AuthenticationExtensionsClientInputs? extensions = null)
+        AuthenticationExtensionsClientInputs extensions = null)
     {
-        byte[] challenge = RandomNumberGenerator.GetBytes(_config.ChallengeSize);
-
+        byte[] challenge = GetRandomBytes(_config.ChallengeSize);
         return CredentialCreateOptions.Create(_config, challenge, user, authenticatorSelection, attestationPreference, excludeCredentials, extensions);
     }
 
@@ -86,10 +94,9 @@ public class Fido2 : IFido2
     public AssertionOptions GetAssertionOptions(
         IEnumerable<PublicKeyCredentialDescriptor> allowedCredentials,
         UserVerificationRequirement? userVerification,
-        AuthenticationExtensionsClientInputs? extensions = null)
+        AuthenticationExtensionsClientInputs extensions = null)
     {
-        byte[] challenge = RandomNumberGenerator.GetBytes(_config.ChallengeSize);
-
+        byte[] challenge = GetRandomBytes(_config.ChallengeSize);
         return AssertionOptions.Create(_config, challenge, allowedCredentials, userVerification, extensions);
     }
 
@@ -125,14 +132,14 @@ public class Fido2 : IFido2
     /// </summary>
     public sealed class CredentialMakeResult : Fido2ResponseBase
     {
-        public CredentialMakeResult(string status, string errorMessage, RegisteredPublicKeyCredential? result)
+        public CredentialMakeResult(string status, string errorMessage, RegisteredPublicKeyCredential result)
         {
             Status = status;
             ErrorMessage = errorMessage;
             Result = result;
         }
 
-        public RegisteredPublicKeyCredential? Result { get; }
+        public RegisteredPublicKeyCredential Result { get; }
 
         // todo: add debuginfo?
     }

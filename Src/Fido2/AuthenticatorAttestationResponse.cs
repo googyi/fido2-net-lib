@@ -5,9 +5,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
@@ -40,10 +40,10 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         // 8. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure
         // to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
-        CborMap cborAttestation;
+        CBORObject cborAttestation;
         try
         {
-            cborAttestation = (CborMap)CborObject.Decode(rawResponse.Response.AttestationObject);
+            cborAttestation = CBORObject.DecodeFromBytes(rawResponse.Response.AttestationObject);
         }
         catch (Exception ex)
         {
@@ -59,7 +59,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         CredentialCreateOptions originalOptions,
         Fido2Configuration config,
         IsCredentialIdUniqueToUserAsyncDelegate isCredentialIdUniqueToUser,
-        IMetadataService? metadataService,
+        IMetadataService metadataService,
         CancellationToken cancellationToken = default)
     {
         // https://www.w3.org/TR/webauthn/#registering-a-new-credential
@@ -85,8 +85,8 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         var authData = AttestationObject.AuthData;
 
         // 10. Let hash be the result of computing a hash over response.clientDataJSON using SHA-256.
-        byte[] clientDataHash = SHA256.HashData(Raw.Response.ClientDataJson);
-        byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(originalOptions.Rp.Id));
+        byte[] clientDataHash = CryptoUtils.HashData(HashAlgorithmName.SHA256, Raw.Response.ClientDataJson);
+        byte[] rpIdHash = CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(originalOptions.Rp.Id));
 
         // 11. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt,
         //    the authenticator data authData, and the attestation statement attStmt.
@@ -121,7 +121,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         //     in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., 
         //     no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
         // TODO?: Implement sort of like this: ClientExtensions.Keys.Any(x => options.extensions.contains(x);
-        byte[]? devicePublicKeyResult = null;
+        byte[] devicePublicKeyResult = null;
 
         if (Raw.Extensions?.DevicePubKey is not null)
         {
@@ -141,7 +141,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         //     for that attestation type and attestation statement format fmt, from a trusted source or from policy. 
         //     For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
 
-        MetadataBLOBPayloadEntry? metadataEntry = null;
+        MetadataBLOBPayloadEntry metadataEntry = null;
         if (metadataService != null)
             metadataEntry = await metadataService.GetEntryAsync(authData.AttestedCredentialData.AaGuid, cancellationToken);
 
@@ -215,7 +215,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
     /// <see cref="https://w3c.github.io/webauthn/#sctn-device-publickey-extension-verification-create"/> 
     private async Task<byte[]> DevicePublicKeyRegistrationAsync(
         Fido2Configuration config,
-        IMetadataService? metadataService,
+        IMetadataService metadataService,
         AuthenticationExtensionsClientOutputs clientExtensionResults,
         AuthenticatorData authData,
         byte[] hash,
@@ -242,7 +242,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         // 5. Complete the steps from § 7.1 Registering a New Credential and, if those steps are successful,
         // store the aaguid, dpk, scope, fmt, attStmt values indexed to the credential.id in the user account.
-        MetadataBLOBPayloadEntry? metadataEntry = null;
+        MetadataBLOBPayloadEntry metadataEntry = null;
         if (metadataService != null)
             metadataEntry = await metadataService.GetEntryAsync(devicePublicKeyAuthenticatorOutput.AaGuid, cancellationToken);
 
@@ -267,7 +267,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
     /// </summary>
     public sealed class ParsedAttestationObject
     {
-        public ParsedAttestationObject(string fmt, CborMap attStmt, AuthenticatorData authData)
+        public ParsedAttestationObject(string fmt, CBORObject attStmt, AuthenticatorData authData)
         {
             Fmt = fmt;
             AttStmt = attStmt;
@@ -276,24 +276,26 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         public string Fmt { get; }
 
-        public CborMap AttStmt { get; }
+        public CBORObject AttStmt { get; }
 
         public AuthenticatorData AuthData { get; }
 
-        internal static ParsedAttestationObject FromCbor(CborMap cbor)
+        internal static ParsedAttestationObject FromCbor(CBORObject cbor)
         {
-            if (!(
-                cbor["fmt"] is CborTextString fmt &&
-                cbor["attStmt"] is CborMap attStmt &&
-                cbor["authData"] is CborByteString authData))
+            if (  cbor["fmt"] == null
+               || cbor["fmt"].Type != CBORType.TextString
+               || cbor["attStmt"] == null
+               || cbor["attStmt"].Type != CBORType.Map
+               || cbor["authData"] == null
+               || cbor["authData"].Type != CBORType.ByteString)
             {
                 throw new Fido2VerificationException(Fido2ErrorCode.MalformedAttestationObject, Fido2ErrorMessages.MalformedAttestationObject);
             }
 
             return new ParsedAttestationObject(
-                fmt: fmt,
-                attStmt: attStmt,
-                authData: AuthenticatorData.Parse(authData)
+                fmt: cbor["fmt"].AsString(),
+                attStmt: cbor["attStmt"],
+                authData: AuthenticatorData.Parse(cbor["authData"].GetByteString())
             );
         }
     }

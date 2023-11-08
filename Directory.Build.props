@@ -15,7 +15,7 @@
   </PropertyGroup>
   <!-- Global Variables -->
   <PropertyGroup>
-    <SupportedTargetFrameworks>net6.0</SupportedTargetFrameworks>
+    <SupportedTargetFrameworks>netstandard2.0</SupportedTargetFrameworks>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <!-- Language + Compiler Settings-->

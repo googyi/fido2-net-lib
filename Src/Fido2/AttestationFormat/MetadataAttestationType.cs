@@ -1,9 +1,10 @@
 ﻿using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
+using Newtonsoft.Json.Converters;
 
 namespace Fido2NetLib;
 
-[JsonConverter(typeof(FidoEnumConverter<MetadataAttestationType>))]
+[JsonConverter(typeof(StringEnumConverter))]
 internal enum MetadataAttestationType
 {
     /// <summary>

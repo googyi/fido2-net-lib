@@ -21,7 +21,7 @@ internal static class JsonElementExtensions
         return result;
     }
 
-    public static bool TryDecodeArrayOfBase64EncodedBytes(this in JsonElement el, [NotNullWhen(true)] out byte[][]? result)
+    public static bool TryDecodeArrayOfBase64EncodedBytes(this in JsonElement el, out byte[][] result)
     {
         if (el.ValueKind is JsonValueKind.Array)
         {

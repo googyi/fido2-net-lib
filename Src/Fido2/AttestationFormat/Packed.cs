@@ -1,10 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Security.Cryptography.X509Certificates;
-
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using Newtonsoft.Json.Linq;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
@@ -20,12 +21,12 @@ internal sealed class Packed : AttestationVerifier
 
         var subjectMap = new Dictionary<string, string>(4);
 
-        foreach (var line in subjectString.AsSpan().EnumerateLines())
+        foreach (var line in subjectString.Split(new string[] { Environment.NewLine }, StringSplitOptions.None))
         {
             int equalIndex = line.IndexOf('=');
 
-            var lhs = line.Slice(0, equalIndex).ToString();
-            var rhs = line.Slice(equalIndex + 1).ToString();
+            var lhs = line.Substring(0, equalIndex);
+            var rhs = line.Substring(equalIndex + 1);
 
             subjectMap[lhs] = rhs;
         }
@@ -43,25 +44,26 @@ internal sealed class Packed : AttestationVerifier
         if (request.AttStmt.Count is 0)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MissingPackedAttestationStatement);
 
-        if (!request.TryGetSig(out byte[]? sig))
+        if (!request.TryGetSig(out byte[] sig))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.InvalidPackedAttestationSignature);
 
         if (!request.TryGetAlg(out var alg))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.InvalidPackedAttestationAlgorithm);
 
         // 2. If x5c is present, this indicates that the attestation type is not ECDAA
-        if (request.X5c is CborObject x5c)
+        if (request.X5c != null /* is CborObject x5c*/)
         {
-            if (!(x5c is CborArray { Length: > 0 } x5cArray) || request.EcdaaKeyId != null)
+            if (request.X5c.Type != CBORType.Array || request.X5c.Count == 0 || request.EcdaaKeyId != null || request.X5c.Values == null)
                 throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MalformedX5c_PackedAttestation);
 
-            var trustPath = new X509Certificate2[x5cArray.Length];
+            var x5cArray = request.X5c.Values;
+            var trustPath = new X509Certificate2[x5cArray.Count];
 
             for (int i = 0; i < trustPath.Length; i++)
             {
-                if (x5cArray[i] is CborByteString { Length: > 0 } x5cObject)
+                if (x5cArray.ElementAt(i) != null && x5cArray.ElementAt(i).Type == CBORType.ByteString && x5cArray.ElementAt(i).GetByteString().Length > 0 )
                 {
-                    var x5cCert = new X509Certificate2(x5cObject.Value);
+                    var x5cCert = new X509Certificate2(x5cArray.ElementAt(i).GetByteString());
 
                     // X509Certificate2.NotBefore/.NotAfter return LOCAL DateTimes, so
                     // it's correct to compare using DateTime.Now.
@@ -113,7 +115,7 @@ internal sealed class Packed : AttestationVerifier
             }
 
             // id-fido-u2f-ce-transports 
-            byte u2fTransports = U2FTransportsFromAttnCert(attestnCert.Extensions);
+            int u2fTransports = U2FTransportsFromAttnCert(attestnCert.Extensions);
 
             // 2d. Optionally, inspect x5c and consult externally provided knowledge to determine whether attStmt conveys a Basic or AttCA attestation
 

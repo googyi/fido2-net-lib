@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
@@ -21,12 +22,15 @@ internal sealed class FidoU2f : AttestationVerifier
         // (handled in base class)
 
         // 2a. Check that x5c has exactly one element and let attCert be that element.
-        if (!(request.X5c is CborArray { Length: 1 } x5cArray && x5cArray[0] is CborByteString { Length: > 0 }))
+        //if (!(request.X5c is CborArray { Length: 1 } x5cArray && x5cArray[0] is CborByteString { Length: > 0 }))
+        if (request.X5c.Values == null || request.X5c.Values.Count != 1 ||
+            request.X5c.Values.First().Type != CBORType.ByteString || 
+            request.X5c.Values.First().GetByteString().Length == 0)
         {
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MalformedX5c_FidoU2fAttestation);
         }
 
-        var attCert = new X509Certificate2((byte[])x5cArray[0]);
+        var attCert = new X509Certificate2(request.X5c.Values.First().GetByteString());
 
         // TODO : Check why this variable isn't used. Remove it or use it.
         var u2fTransports = U2FTransportsFromAttnCert(attCert.Extensions);
@@ -45,10 +49,10 @@ internal sealed class FidoU2f : AttestationVerifier
 
         // 4. Convert the COSE_KEY formatted credentialPublicKey (see Section 7 of [RFC8152]) to CTAP1/U2F public Key format (Raw ANSI X9.62 public key format)
         // 4a. Let x be the value corresponding to the "-2" key (representing x coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-2" key is not found, terminate this algorithm and return an appropriate error
-        var x = (byte[])request.CredentialPublicKey[COSE.KeyTypeParameter.X];
+        var x = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
 
         // 4b. Let y be the value corresponding to the "-3" key (representing y coordinate) in credentialPublicKey, and confirm its size to be of 32 bytes. If size differs or "-3" key is not found, terminate this algorithm and return an appropriate error
-        var y = (byte[])request.CredentialPublicKey[COSE.KeyTypeParameter.Y];
+        var y = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
         // 4c.Let publicKeyU2F be the concatenation 0x04 || x || y
         var publicKeyU2F = DataHelper.Concat(stackalloc byte[1] { 0x4 }, x, y);
@@ -63,7 +67,7 @@ internal sealed class FidoU2f : AttestationVerifier
         );
 
         // 6. Verify the sig using verificationData and certificate public key
-        if (!request.TryGetSig(out byte[]? sig))
+        if (!request.TryGetSig(out byte[] sig))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.InvalidFidoU2fAttestationSignature);
 
         byte[] ecsig;
@@ -76,7 +80,7 @@ internal sealed class FidoU2f : AttestationVerifier
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "Failed to decode fido-u2f attestation signature from ASN.1 encoded form", ex);
         }
 
-        var coseAlg = (COSE.Algorithm)(int)request.CredentialPublicKey[COSE.KeyCommonParameter.Alg];
+        var coseAlg = (COSE.Algorithm)request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyCommonParameter.Alg)].AsInt32();
         var hashAlg = CryptoUtils.HashAlgFromCOSEAlg(coseAlg);
 
         if (!pubKey.VerifyData(verificationData, ecsig, hashAlg))

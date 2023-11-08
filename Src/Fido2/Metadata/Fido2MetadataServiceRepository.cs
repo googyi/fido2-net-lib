@@ -45,35 +45,35 @@ public sealed class Fido2MetadataServiceRepository : IMetadataRepository
         _httpClientFactory = httpClientFactory;
     }
 
-    public Task<MetadataStatement?> GetMetadataStatementAsync(MetadataBLOBPayload blob, MetadataBLOBPayloadEntry entry, CancellationToken cancellationToken = default)
+    public Task<MetadataStatement> GetMetadataStatementAsync(MetadataBLOBPayload blob, MetadataBLOBPayloadEntry entry, CancellationToken cancellationToken = default)
     {
-        return Task.FromResult<MetadataStatement?>(entry.MetadataStatement);
+        return Task.FromResult<MetadataStatement>(entry.MetadataStatement);
     }
 
     public async Task<MetadataBLOBPayload> GetBLOBAsync(CancellationToken cancellationToken = default)
     {
-        var rawBLOB = await GetRawBlobAsync(cancellationToken);
+        var rawBLOB = await GetRawBlobAsync();
         return await DeserializeAndValidateBlobAsync(rawBLOB, cancellationToken);
     }
 
-    private async Task<string> GetRawBlobAsync(CancellationToken cancellationToken)
+    private async Task<string> GetRawBlobAsync()
     {
         var url = _blobUrl;
-        return await DownloadStringAsync(url, cancellationToken);
+        return await DownloadStringAsync(url);
     }
 
-    private async Task<string> DownloadStringAsync(string url, CancellationToken cancellationToken)
+    private async Task<string> DownloadStringAsync(string url)
     {
         return await _httpClientFactory
             .CreateClient(nameof(Fido2MetadataServiceRepository))
-            .GetStringAsync(url, cancellationToken);
+            .GetStringAsync(url);
     }
 
-    private async Task<byte[]> DownloadDataAsync(string url, CancellationToken cancellationToken)
+    private async Task<byte[]> DownloadDataAsync(string url)
     {
         return await _httpClientFactory
             .CreateClient(nameof(Fido2MetadataServiceRepository))
-            .GetByteArrayAsync(url, cancellationToken);
+            .GetByteArrayAsync(url);
     }
 
     private async Task<MetadataBLOBPayload> DeserializeAndValidateBlobAsync(string rawBLOBJwt, CancellationToken cancellationToken)
@@ -174,18 +174,18 @@ public sealed class Fido2MetadataServiceRepository : IMetadataRepository
                 if (element.Certificate.Issuer != element.Certificate.Subject)
                 {
                     var cdp = CryptoUtils.CDPFromCertificateExts(element.Certificate.Extensions);
-                    var crlFile = await DownloadDataAsync(cdp, cancellationToken);
+                    var crlFile = await DownloadDataAsync(cdp);
                     if (CryptoUtils.IsCertInCRL(crlFile, element.Certificate))
                         throw new Fido2VerificationException($"Cert {element.Certificate.Subject} found in CRL {cdp}");
                 }
             }
 
             // otherwise we have to manually validate that the root in the chain we are testing is the root we downloaded
-            if (rootCert.Thumbprint == certChain.ChainElements[^1].Certificate.Thumbprint &&
+            if (rootCert.Thumbprint == certChain.ChainElements[certChain.ChainElements.Count - 1].Certificate.Thumbprint &&
                 // and that the number of elements in the chain accounts for what was in x5c plus the root we added
                 certChain.ChainElements.Count == (x5cRawKeys.Length + 1) &&
                 // and that the root cert has exactly one status with the value of UntrustedRoot
-                certChain.ChainElements[^1].ChainElementStatus is [{ Status: X509ChainStatusFlags.UntrustedRoot }])
+                certChain.ChainElements[certChain.ChainElements.Count - 1].ChainElementStatus[0].Status == X509ChainStatusFlags.UntrustedRoot)
             {
                 // if we are good so far, that is a good sign
                 certChainIsValid = true;
@@ -203,7 +203,7 @@ public sealed class Fido2MetadataServiceRepository : IMetadataRepository
 
         var blobPayload = ((JwtSecurityToken)validatedToken).Payload.SerializeToJson();
 
-        MetadataBLOBPayload blob = JsonSerializer.Deserialize(blobPayload, FidoModelSerializerContext.Default.MetadataBLOBPayload)!;
+        MetadataBLOBPayload blob = JsonSerializer.Deserialize<MetadataBLOBPayload>(blobPayload)!;
         blob.JwtAlg = blobAlg;
         return blob;
     }

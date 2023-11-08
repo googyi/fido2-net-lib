@@ -11,9 +11,7 @@ public sealed class Extensions
 
     public Extensions(byte[] extensions)
     {
-        ArgumentNullException.ThrowIfNull(extensions);
-
-        _extensionBytes = extensions;
+        _extensionBytes = extensions ?? throw new ArgumentNullException(nameof(extensions));
     }
 
     public int Length => _extensionBytes.Length;
