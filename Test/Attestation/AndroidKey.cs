@@ -215,7 +215,7 @@ public class AndroidKey : Fido2Tests.Attestation
         Assert.Equal("Failed to decode android key attestation signature from ASN.1 encoded form", ex.Result.Message);
 
         var innerException = (AsnException)ex.Result.InnerException;
-        Assert.Equal("The ASN.1 value is invalid.", innerException.Message); // TODO - will fail
+        Assert.Equal("offset overflow", innerException.Message);
     }
 
     [Fact]

@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text;
 
 using Fido2NetLib.Exceptions;
-using Fido2NetLib.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -22,20 +21,20 @@ public class AuthenticatorResponse
         Origin = origin;
     }
 
-    protected AuthenticatorResponse(ReadOnlySpan<byte> utf8EncodedJson)
+    protected AuthenticatorResponse(byte[] utf8EncodedJson)
     {
         if (utf8EncodedJson.Length is 0)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAuthenticatorResponse, "utf8EncodedJson may not be empty");
 
         // 1. Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON
-
+        var JSONtext = Encoding.UTF8.GetString(utf8EncodedJson);
         // 2. Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext
         // Note: C may be any implementation-specific data structure representation, as long as C’s components are referenceable, as required by this algorithm.
         // We call this AuthenticatorResponse
         AuthenticatorResponse response;
         try
         {
-            response = JsonSerializer.Deserialize(utf8EncodedJson, FidoSerializerContext.Default.AuthenticatorResponse);
+            response = JsonConvert.DeserializeObject<AuthenticatorResponse>(JSONtext);
         }
         catch (Exception e) when (e is JsonException)
         {
@@ -52,14 +51,14 @@ public class AuthenticatorResponse
 
     public const int MAX_ORIGINS_TO_PRINT = 5;
 
-    [JsonPropertyName("type")]
+    [JsonProperty("type")]
     public string Type { get; }
 
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonPropertyName("challenge")]
+    [JsonProperty("challenge")]
     public byte[] Challenge { get; }
 
-    [JsonPropertyName("origin")]
+    [JsonProperty("origin")]
     public string Origin { get; }
 
     protected void BaseVerify(IReadOnlyCollection<string> fullyQualifiedExpectedOrigins, ReadOnlySpan<byte> originalChallenge)

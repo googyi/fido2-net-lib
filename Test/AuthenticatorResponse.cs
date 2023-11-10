@@ -1,6 +1,6 @@
 ﻿using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 using Fido2NetLib;
 using Fido2NetLib.Exceptions;
@@ -18,7 +18,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void CanDeserialize()
     {
-        var response = JsonSerializer.Deserialize<AuthenticatorResponse>("{\"type\":\"webauthn.get\",\"challenge\":\"J4fjxBV-BNywGRJRm8JZ7znvdiZo9NINObNBpnKnJQEOtplTMF0ERuIrzrkeoO-dNMoeMZjhzqfar7eWRANvPeNFPrB5Q6zlS1ZFPf37F3suIwpXi9NCpFA_RlBSiygLmvcIOa57_QHubZQD3cv0UWtRTLslJjmgumphMc7EFN8\",\"origin\":\"https://www.passwordless.dev\"}");
+        var response = JsonConvert.DeserializeObject<AuthenticatorResponse>("{\"type\":\"webauthn.get\",\"challenge\":\"J4fjxBV-BNywGRJRm8JZ7znvdiZo9NINObNBpnKnJQEOtplTMF0ERuIrzrkeoO-dNMoeMZjhzqfar7eWRANvPeNFPrB5Q6zlS1ZFPf37F3suIwpXi9NCpFA_RlBSiygLmvcIOa57_QHubZQD3cv0UWtRTLslJjmgumphMc7EFN8\",\"origin\":\"https://www.passwordless.dev\"}");
 
         Assert.Equal("webauthn.get", response.Type);
         Assert.Equal(Base64Url.Decode("J4fjxBV-BNywGRJRm8JZ7znvdiZo9NINObNBpnKnJQEOtplTMF0ERuIrzrkeoO-dNMoeMZjhzqfar7eWRANvPeNFPrB5Q6zlS1ZFPf37F3suIwpXi9NCpFA_RlBSiygLmvcIOa57_QHubZQD3cv0UWtRTLslJjmgumphMc7EFN8"), response.Challenge);
@@ -65,12 +65,12 @@ public class AuthenticatorResponseTests
             acd
         ).ToByteArray();
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp
-        });
+        }));
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
             Type = PublicKeyCredentialType.PublicKey,
@@ -167,12 +167,12 @@ public class AuthenticatorResponseTests
             0,
             acd
         ).ToByteArray();
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -236,12 +236,12 @@ public class AuthenticatorResponseTests
     public void TestAuthenticatorAttestationRawResponse()
     {
         var challenge = CryptoUtils.GetRandomBytes(128);
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             Type = "webauthn.create",
             Challenge = challenge,
             Origin = "https://www.passwordless.dev",
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -347,7 +347,7 @@ public class AuthenticatorResponseTests
 
         var innerEx = (CBORException)ex.InnerException;
 
-        Assert.Equal("Declared definite length of CBOR data item exceeds available buffer size.", innerEx.Message); // TODO should fail
+        Assert.Equal("Premature end of data", innerEx.Message);
     }
 
     [Theory]
@@ -378,12 +378,12 @@ public class AuthenticatorResponseTests
     {
         var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             Type = "webauthn.get",
             Challenge = challenge,
             Origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -450,12 +450,12 @@ public class AuthenticatorResponseTests
     {
         var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -520,12 +520,12 @@ public class AuthenticatorResponseTests
     {
         var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -597,12 +597,12 @@ public class AuthenticatorResponseTests
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -675,12 +675,12 @@ public class AuthenticatorResponseTests
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -754,12 +754,12 @@ public class AuthenticatorResponseTests
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -832,12 +832,12 @@ public class AuthenticatorResponseTests
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -910,12 +910,12 @@ public class AuthenticatorResponseTests
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -988,12 +988,12 @@ public class AuthenticatorResponseTests
             acd
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -1066,12 +1066,12 @@ public class AuthenticatorResponseTests
             0,
             acd
         ).ToByteArray();
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -1143,12 +1143,12 @@ public class AuthenticatorResponseTests
             0,
             acd
         ).ToByteArray();
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -1212,12 +1212,12 @@ public class AuthenticatorResponseTests
     public void TestAuthenticatorAssertionRawResponse()
     {
         var challenge = CryptoUtils.GetRandomBytes(128);
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             Type = "webauthn.get",
             Challenge = challenge,
             Origin = "https://www.passwordless.dev",
-        });
+        }));
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse
         {
@@ -1283,7 +1283,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1352,7 +1352,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1421,7 +1421,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1489,7 +1489,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1558,7 +1558,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1627,7 +1627,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1697,7 +1697,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1768,7 +1768,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1838,7 +1838,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1908,7 +1908,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1977,7 +1977,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2046,7 +2046,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2115,7 +2115,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2184,7 +2184,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2254,7 +2254,7 @@ public class AuthenticatorResponseTests
            origin: rp
        );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2323,7 +2323,7 @@ public class AuthenticatorResponseTests
            origin: rp
        );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2393,7 +2393,7 @@ public class AuthenticatorResponseTests
            origin: rp
        );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {

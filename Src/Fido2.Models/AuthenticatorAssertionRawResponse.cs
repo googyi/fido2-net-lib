@@ -1,7 +1,4 @@
-﻿#nullable disable
-
-using Newtonsoft.Json;
-
+﻿using Newtonsoft.Json;
 using Fido2NetLib.Objects;
 
 namespace Fido2NetLib;
@@ -42,13 +39,13 @@ public class AuthenticatorAssertionRawResponse
         [JsonConverter(typeof(Base64UrlConverter))]
         [JsonProperty("clientDataJSON")]
         public byte[] ClientDataJson { get; set; }
-#nullable enable
+
         [JsonProperty("userHandle")]
-        [JsonConverter(typeof(Base64UrlConverter))]
-        public byte[]? UserHandle { get; set; }
+        [JsonConverter(typeof(Base64UrlConverter), Required.AllowNull)]
+        public byte[] UserHandle { get; set; }
 
         [JsonProperty("attestationObject")]
-        [JsonConverter(typeof(Base64UrlConverter))]
-        public byte[]? AttestationObject { get; set; }
+        [JsonConverter(typeof(Base64UrlConverter), Required.AllowNull)]
+        public byte[] AttestationObject { get; set; }
     }
 }
