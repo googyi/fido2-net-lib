@@ -83,6 +83,11 @@ namespace Fido2NetLib.Objects
         {
         }
 
+        public static AttestedCredentialData Parse(byte[] bytes)
+        {
+            return new AttestedCredentialData(bytes);
+        }
+
         /// <summary>
         /// Decodes attested credential data.
         /// </summary>

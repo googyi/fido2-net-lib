@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 using Fido2NetLib.Objects;
 
@@ -7,30 +7,30 @@ namespace Fido2NetLib;
 public sealed class AuthenticatorAttestationRawResponse
 {
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonPropertyName("id")]
+    [JsonProperty("id")]
     public byte[] Id { get; set; }
 
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonPropertyName("rawId")]
+    [JsonProperty("rawId")]
     public byte[] RawId { get; set; }
 
-    [JsonPropertyName("type")]
+    [JsonProperty("type")]
     public PublicKeyCredentialType? Type { get; set; }
 
-    [JsonPropertyName("response")]
+    [JsonProperty("response")]
     public ResponseData Response { get; set; }
 
-    [JsonPropertyName("extensions")]
+    [JsonProperty("extensions")]
     public AuthenticationExtensionsClientOutputs Extensions { get; set; }
 
     public sealed class ResponseData
     {
         [JsonConverter(typeof(Base64UrlConverter))]
-        [JsonPropertyName("attestationObject")]
+        [JsonProperty("attestationObject")]
         public byte[] AttestationObject { get; set; }
 
         [JsonConverter(typeof(Base64UrlConverter))]
-        [JsonPropertyName("clientDataJSON")]
+        [JsonProperty("clientDataJSON")]
         public byte[] ClientDataJson { get; set; }
     }
 }

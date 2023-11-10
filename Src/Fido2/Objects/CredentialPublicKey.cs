@@ -260,5 +260,5 @@ public sealed class CredentialPublicKey
 
     public bool IsSameAlg(COSE.Algorithm alg) => _alg.Equals(alg);
 
-    public CBORObject GetCborObject() => _cpk;
+    public CBORObject GetCBORObject() => _cpk;
 }

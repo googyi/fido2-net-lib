@@ -7,7 +7,6 @@ using System.Text;
 using fido2_net_lib.Test;
 
 using Fido2NetLib;
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
 
@@ -15,6 +14,7 @@ using Microsoft.IdentityModel.Tokens;
 
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using PeterO.Cbor;
 
 namespace Test.Attestation;
 
@@ -22,7 +22,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 {
     public AndroidSafetyNet()
     {
-        _attestationObject = new CborMap { { "fmt", "android-safetynet" } };
+        _attestationObject = CBORObject.NewMap().Add("fmt", "android-safetynet");
         var (type, alg, curve) = Fido2Tests._validCOSEParameters[0];
         X509Certificate2 root, attestnCert;
         DateTimeOffset notBefore = DateTimeOffset.UtcNow;
@@ -39,7 +39,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
         {
             var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-            var serial = RandomNumberGenerator.GetBytes(12);
+            var serial = CryptoUtils.GetRandomBytes(12);
 
             using (X509Certificate2 publicOnly = attRequest.Create(root, notBefore, notAfter, serial))
             {
@@ -48,16 +48,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
             var ecParams = ecdsaAtt.ExportParameters(true);
 
-            var cpk = new CborMap {
-                { COSE.KeyCommonParameter.KeyType, type },
-                { COSE.KeyCommonParameter.Alg, alg },
-                { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                { COSE.KeyTypeParameter.Crv, curve }
-            };
+            var cpk = CBORObject.NewMap()
+                .Add( COSE.KeyCommonParameter.KeyType, type)
+                .Add( COSE.KeyCommonParameter.Alg, alg)
+                .Add( COSE.KeyTypeParameter.X, ecParams.Q.X)
+                .Add( COSE.KeyTypeParameter.Y, ecParams.Q.Y)
+                .Add( COSE.KeyTypeParameter.Crv, curve);
 
-            var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-            var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+            var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+            var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
             _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -87,10 +86,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
             }
 
-            _attestationObject.Add("attStmt", new CborMap {
-                { "ver", "F1D0" },
-                { "response", Encoding.UTF8.GetBytes(strToken) }
-            });
+            _attestationObject.Add("attStmt", CBORObject.NewMap()
+                .Add("ver", "F1D0")
+                .Add("response", Encoding.UTF8.GetBytes(strToken)));
         }
     }
 
@@ -108,7 +106,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
         Assert.Equal(_credentialPublicKey.GetBytes(), res.Result.PublicKey);
         Assert.Null(res.Result.Status);
         Assert.Equal("Test User", res.Result.User.DisplayName);
-        Assert.Equal("testuser"u8.ToArray(), res.Result.User.Id);
+        Assert.Equal(Encoding.UTF8.GetBytes("testuser"), res.Result.User.Id);
         Assert.Equal("testuser", res.Result.User.Name);
     }
 
@@ -133,7 +131,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
         {
             var attRequest = new CertificateRequest(attDN, rsaAtt, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
 
-            byte[] serial = RandomNumberGenerator.GetBytes(12);
+            byte[] serial = CryptoUtils.GetRandomBytes(12);
 
             using (X509Certificate2 publicOnly = attRequest.Create(root, notBefore, notAfter, serial))
             {
@@ -142,13 +140,11 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
             var rsaParams = rsaAtt.ExportParameters(true);
 
-            var cpk = new CborMap
-            {
-                { COSE.KeyCommonParameter.KeyType, type },
-                { COSE.KeyCommonParameter.Alg, alg },
-                { COSE.KeyTypeParameter.N, rsaParams.Modulus },
-                { COSE.KeyTypeParameter.E, rsaParams.Exponent }
-            };
+            var cpk = CBORObject.NewMap();
+            cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+            cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+            cpk.Add(COSE.KeyTypeParameter.N, rsaParams.Modulus);
+            cpk.Add(COSE.KeyTypeParameter.E, rsaParams.Exponent);
 
             _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -177,10 +173,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
             }
 
-            _attestationObject.Set("attStmt", new CborMap {
-                { "ver", "F1D0" },
-                { "response", Encoding.UTF8.GetBytes(strToken) }
-            });
+            _attestationObject.Set("attStmt", CBORObject.NewMap()
+                .Add("ver", "F1D0")
+                .Add("response", Encoding.UTF8.GetBytes(strToken)));
 
             var res = await MakeAttestationResponseAsync();
             Assert.Equal(string.Empty, res.ErrorMessage);
@@ -193,7 +188,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             Assert.Equal(_credentialPublicKey.GetBytes(), res.Result.PublicKey);
             Assert.Null(res.Result.Status);
             Assert.Equal("Test User", res.Result.User.DisplayName);
-            Assert.Equal("testuser"u8.ToArray(), res.Result.User.Id);
+            Assert.Equal(Encoding.UTF8.GetBytes("testuser"), res.Result.User.Id);
             Assert.Equal("testuser", res.Result.User.Name);
         }
     }
@@ -201,8 +196,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetVerNotString()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("ver", new CborInteger(1));
+        _attestationObject["attStmt"].Set("ver", 1);
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Invalid version in SafetyNet data", ex.Result.Message);
     }
@@ -210,8 +204,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetVerMissing()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("ver", CborNull.Instance);
+        _attestationObject["attStmt"].Set("ver", null);
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Invalid version in SafetyNet data", ex.Result.Message);
     }
@@ -219,8 +212,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetVerStrLenZero()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("ver", new CborTextString(""));
+        _attestationObject["attStmt"].Set("ver", "");
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Invalid version in SafetyNet data", ex.Result.Message);
     }
@@ -228,8 +220,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetResponseMissing()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", CborNull.Instance);
+        _attestationObject["attStmt"].Set("response", null);
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Invalid response in SafetyNet data", ex.Result.Message);
     }
@@ -237,8 +228,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetResponseNotByteString()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborTextString("telephone"));
+        _attestationObject["attStmt"].Set("response", "telephone");
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Invalid response in SafetyNet data", ex.Result.Message);
     }
@@ -246,8 +236,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetResponseByteStringLenZero()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborByteString(new byte[] { }));
+        _attestationObject["attStmt"].Set("response", new byte[] { });
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Invalid response in SafetyNet data", ex.Result.Message);
     }
@@ -255,8 +244,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyResponseWhitespace()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborByteString(" "u8.ToArray()));
+        _attestationObject["attStmt"].Set("response", Encoding.UTF8.GetBytes(" "));
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Same(Fido2ErrorMessages.MalformedSafetyNetJwt, ex.Result.Message);
     }
@@ -267,11 +255,10 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [InlineData("x.x.")]
     public void TestAndroidSafetyNetMalformedResponseJWT(string text)
     {
-        var response = (byte[])_attestationObject["attStmt"]["response"];
+        var response = _attestationObject["attStmt"]["response"].GetByteString();
         var responseJWT = Encoding.UTF8.GetString(response);
 
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborByteString(Encoding.UTF8.GetBytes(text)));
+        _attestationObject["attStmt"].Set("response", Encoding.UTF8.GetBytes(text));
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Same(Fido2ErrorMessages.MalformedSafetyNetJwt, ex.Result.Message);
     }
@@ -279,14 +266,13 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetResponseJWTMissingX5c()
     {
-        var response = (byte[])_attestationObject["attStmt"]["response"];
+        var response = _attestationObject["attStmt"]["response"].GetByteString();
         var jwtParts = Encoding.UTF8.GetString(response).Split('.');
         var jwtHeaderJSON = JObject.Parse(Encoding.UTF8.GetString(Base64Url.Decode(jwtParts.First())));
         jwtHeaderJSON.Remove("x5c");
         jwtParts[0] = Base64Url.Encode(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(jwtHeaderJSON)));
         response = Encoding.UTF8.GetBytes(string.Join(".", jwtParts));
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborByteString(response));
+        _attestationObject["attStmt"].Set("response", response);
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("SafetyNet response JWT header missing x5c", ex.Result.Message);
     }
@@ -294,15 +280,14 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetResponseJWTX5cNoKeys()
     {
-        var response = (byte[])_attestationObject["attStmt"]["response"];
+        var response = _attestationObject["attStmt"]["response"].GetByteString();
         var jwtParts = Encoding.UTF8.GetString(response).Split('.');
         var jwtHeaderJSON = JObject.Parse(Encoding.UTF8.GetString(Base64Url.Decode(jwtParts.First())));
         jwtHeaderJSON.Remove("x5c");
         jwtHeaderJSON.Add("x5c", JToken.FromObject(new List<string> { }));
         jwtParts[0] = Base64Url.Encode(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(jwtHeaderJSON)));
         response = Encoding.UTF8.GetBytes(string.Join(".", jwtParts));
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborByteString(response));
+        _attestationObject["attStmt"].Set("response", response);
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("No keys were present in the TOC header in SafetyNet response JWT", ex.Result.Message);
     }
@@ -310,15 +295,14 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public void TestAndroidSafetyNetResponseJWTX5cInvalidString()
     {
-        var response = (byte[])_attestationObject["attStmt"]["response"];
+        var response = _attestationObject["attStmt"]["response"].GetByteString();
         var jwtParts = Encoding.UTF8.GetString(response).Split('.');
         var jwtHeaderJSON = JObject.Parse(Encoding.UTF8.GetString(Base64Url.Decode(jwtParts.First())));
         jwtHeaderJSON.Remove("x5c");
         jwtHeaderJSON.Add("x5c", JToken.FromObject(new List<string> { "RjFEMA==" }));
         jwtParts[0] = Base64Url.Encode(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(jwtHeaderJSON)));
         response = Encoding.UTF8.GetBytes(string.Join(".", jwtParts));
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborByteString(response));
+        _attestationObject["attStmt"].Set("response", response);
         var ex = Assert.ThrowsAnyAsync<Exception>(async () => await MakeAttestationResponseAsync());
         Assert.Equal("Could not parse X509 certificate", ex.Result.Message);
     }
@@ -326,7 +310,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
     [Fact]
     public async Task TestAndroidSafetyNetJwtInvalid()
     {
-        var response = (byte[])_attestationObject["attStmt"]["response"];
+        var response = _attestationObject["attStmt"]["response"].GetByteString();
         var jwtParts = Encoding.UTF8.GetString(response).Split('.');
         var jwtHeaderJSON = JObject.Parse(Encoding.UTF8.GetString(Base64Url.Decode(jwtParts.First())));
         jwtHeaderJSON.Remove("x5c");
@@ -335,7 +319,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
         {
             var attRequest = new CertificateRequest(new X500DistinguishedName("CN=fakeattest.android.com"), ecdsaAtt, HashAlgorithmName.SHA256);
 
-            byte[] serial = RandomNumberGenerator.GetBytes(12);
+            byte[] serial = CryptoUtils.GetRandomBytes(12);
 
             using X509Certificate2 publicOnly = attRequest.CreateSelfSigned(
                 DateTimeOffset.UtcNow,
@@ -346,8 +330,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
         jwtHeaderJSON.Add("x5c", JToken.FromObject(new List<string> { Convert.ToBase64String(x5c) }));
         jwtParts[0] = Base64Url.Encode(Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(jwtHeaderJSON)));
         response = Encoding.UTF8.GetBytes(string.Join(".", jwtParts));
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("response", new CborByteString(response));
+        _attestationObject["attStmt"].Set("response", response);
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.StartsWith("SafetyNet response security token validation failed", ex.Message);
     }
@@ -373,7 +356,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(
                     root,
@@ -386,16 +369,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -425,10 +407,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -455,7 +436,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(root, notBefore, notAfter, serial))
                 {
@@ -464,17 +445,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -504,10 +483,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -535,7 +513,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(root, notBefore, notAfter, serial))
                 {
@@ -544,17 +522,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -583,10 +559,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -614,7 +589,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(root, notBefore, notAfter, serial))
                 {
@@ -623,17 +598,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -662,10 +635,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -695,7 +667,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(
                     root,
@@ -708,17 +680,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -749,10 +719,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -782,7 +751,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(
                     root,
@@ -795,17 +764,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -834,10 +801,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -867,7 +833,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(root, notBefore, notAfter, serial))
                 {
@@ -876,17 +842,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -916,10 +880,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -951,7 +914,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(
                     root,
@@ -964,17 +927,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -1003,10 +964,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -1033,7 +993,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             {
                 var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-                byte[] serial = RandomNumberGenerator.GetBytes(12);
+                byte[] serial = CryptoUtils.GetRandomBytes(12);
 
                 using (X509Certificate2 publicOnly = attRequest.Create(root, notBefore, notAfter, serial))
                 {
@@ -1042,17 +1002,15 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
 
                 var ecParams = ecdsaAtt.ExportParameters(true);
 
-                var cpk = new CborMap
-                {
-                    { COSE.KeyCommonParameter.KeyType, type },
-                    { COSE.KeyCommonParameter.Alg, alg },
-                    { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                    { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                    { COSE.KeyTypeParameter.Crv, curve }
-                };
+                var cpk = CBORObject.NewMap();
+                cpk.Add(COSE.KeyCommonParameter.KeyType, type);
+                cpk.Add(COSE.KeyCommonParameter.Alg, alg);
+                cpk.Add(COSE.KeyTypeParameter.X, ecParams.Q.X);
+                cpk.Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y);
+                cpk.Add(COSE.KeyTypeParameter.Crv, curve);
 
-                var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-                var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+                var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+                var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
                 _credentialPublicKey = new CredentialPublicKey(cpk);
 
@@ -1082,10 +1040,9 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                     strToken = new JwtSecurityTokenHandler().WriteToken(securityToken);
                 }
 
-                _attestationObject.Set("attStmt", new CborMap {
-                    { "ver", "F1D0" },
-                    { "response", Encoding.UTF8.GetBytes(strToken) }
-                 });
+                _attestationObject.Set("attStmt", CBORObject.NewMap()
+                    .Add("ver", "F1D0")
+                    .Add("response", Encoding.UTF8.GetBytes(strToken)));
             }
         }
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());

@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -14,7 +13,6 @@ public class Fido2 : IFido2
 {
     private readonly Fido2Configuration _config;
     private readonly IMetadataService _metadataService;
-    private readonly RandomNumberGenerator _crypto;
 
     public Fido2(
         Fido2Configuration config,
@@ -22,14 +20,6 @@ public class Fido2 : IFido2
     {
         _config = config;
         _metadataService = metadataService;
-        _crypto = RandomNumberGenerator.Create();
-    }
-
-    private byte[] GetRandomBytes(int byteArrayLength)
-    {
-        var bytes = new byte[byteArrayLength];
-        _crypto.GetBytes(bytes);
-        return bytes;
     }
 
     /// <summary>
@@ -58,7 +48,7 @@ public class Fido2 : IFido2
         AttestationConveyancePreference attestationPreference,
         AuthenticationExtensionsClientInputs extensions = null)
     {
-        byte[] challenge = GetRandomBytes(_config.ChallengeSize);
+        byte[] challenge = CryptoUtils.GetRandomBytes(_config.ChallengeSize);
         return CredentialCreateOptions.Create(_config, challenge, user, authenticatorSelection, attestationPreference, excludeCredentials, extensions);
     }
 
@@ -96,7 +86,7 @@ public class Fido2 : IFido2
         UserVerificationRequirement? userVerification,
         AuthenticationExtensionsClientInputs extensions = null)
     {
-        byte[] challenge = GetRandomBytes(_config.ChallengeSize);
+        byte[] challenge = CryptoUtils.GetRandomBytes(_config.ChallengeSize);
         return AssertionOptions.Create(_config, challenge, allowedCredentials, userVerification, extensions);
     }
 

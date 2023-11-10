@@ -10,8 +10,17 @@ using Fido2NetLib.Objects;
 
 namespace Fido2NetLib;
 
-internal static class CryptoUtils
+public static class CryptoUtils
 {
+    private static RandomNumberGenerator rnd = RandomNumberGenerator.Create();
+
+    public static byte[] GetRandomBytes(int byteArrayLength)
+    {
+        var bytes = new byte[byteArrayLength];
+        rnd.GetBytes(bytes);
+        return bytes;
+    }
+
     public static byte[] HashData(HashAlgorithmName hashName, ReadOnlySpan<byte> data)
     {
         return HashData(hashName, data.ToArray());

@@ -30,8 +30,8 @@ public class Base64UrlTest
     {
         public TestDataGenerator()
         {
-            Add("A"u8.ToArray());
-            Add("This is a string fragment to test Base64Url encoding & decoding."u8.ToArray());
+            Add(Encoding.UTF8.GetBytes("A").ToArray());
+            Add(Encoding.UTF8.GetBytes("This is a string fragment to test Base64Url encoding & decoding.").ToArray());
             Add(Array.Empty<byte>());
         }
     }

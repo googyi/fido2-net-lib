@@ -28,7 +28,7 @@ public sealed class VerifyAttestationRequest
 
     internal AuthenticatorData AuthData => _authenticatorData;
 
-    internal CBORObject CredentialPublicKey => AuthData.AttestedCredentialData!.CredentialPublicKey.GetCborObject();
+    internal CBORObject CredentialPublicKey => AuthData.AttestedCredentialData!.CredentialPublicKey.GetCBORObject();
 
     internal byte[] Data => DataHelper.Concat(_authenticatorData.ToByteArray(), _clientDataHash);
 

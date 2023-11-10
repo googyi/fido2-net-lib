@@ -10,7 +10,7 @@ public class PubKeyCredParamTests
     [Fact]
     public void CanDeserializeES256()
     {
-        string json = """{"type":"public-key","alg":-7}""";
+        string json = "{\"type\":\"public-key\",\"alg\":-7}";
 
         var model = JsonSerializer.Deserialize<PubKeyCredParam>(json);
 
@@ -21,7 +21,7 @@ public class PubKeyCredParamTests
     [Fact]
     public void CanDeserializeES256K()
     {
-        string json = """{"type":"public-key","alg":-47}""";
+        string json = "{\"type\":\"public-key\",\"alg\":-47}";
 
         var model = JsonSerializer.Deserialize<PubKeyCredParam>(json);
 
