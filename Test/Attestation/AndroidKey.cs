@@ -141,7 +141,7 @@ public class AndroidKey : Fido2Tests.Attestation
     [Fact]
     public async Task TestAndroidKeyX5cValueNotByteString()
     {
-        _attestationObject["attStmt"].Set("x5c", "x".ToArray());
+        _attestationObject["attStmt"].Set("x5c", "x");
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
 
         Assert.Equal(Fido2ErrorCode.InvalidAttestation, ex.Code);

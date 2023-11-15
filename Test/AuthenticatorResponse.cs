@@ -6,7 +6,6 @@ using Fido2NetLib;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Internal;
 using Fido2NetLib.Objects;
-using Fido2NetLib.Serialization;
 
 using NSec.Cryptography;
 using PeterO.Cbor;

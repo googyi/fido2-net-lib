@@ -79,6 +79,7 @@ public class AppleAppAttest : Fido2Tests.Attestation
                 .Add(attestnCert.RawData)
                 .Add(root.RawData);
 
+            _attestationObject.Remove("attStmt");
             _attestationObject.Add("attStmt", CBORObject.NewMap().Add("x5c", x5c));
         }
     }

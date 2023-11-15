@@ -54,7 +54,8 @@ internal sealed class AppleAppAttest : AttestationVerifier
     public override (AttestationType, X509Certificate2[]) Verify(VerifyAttestationRequest request)
     {
         // 1. Verify that the x5c array contains the intermediate and leaf certificates for App Attest, starting from the credential certificate in the first data buffer in the array (credcert).
-        if (request.X5c == null || request.X5c.Type != CBORType.Array || request.X5c.Count != 2 || request.X5c.Values == null || request.X5c.Values.Count < 2
+        if (request.X5c == null || request.X5c.Type != CBORType.Array || request.X5c.Count != 2 || request.X5c.Values == null || request.X5c.Values.Count != 2
+            || request.X5c.Values.ElementAt(0) == null || request.X5c.Values.ElementAt(1) == null
             || request.X5c.Values.ElementAt(0).Type != CBORType.ByteString || request.X5c.Values.ElementAt(1).Type != CBORType.ByteString
             || request.X5c.Values.ElementAt(0).GetByteString().Length == 0 || request.X5c.Values.ElementAt(1).GetByteString().Length == 0)
         {
@@ -64,25 +65,9 @@ internal sealed class AppleAppAttest : AttestationVerifier
         var x5cArray = request.X5c.Values.ToArray();
 
         // Verify the validity of the certificates using Apple's App Attest root certificate.
-        var chain = new X509Chain();
-        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
-        chain.ChainPolicy.ExtraStore.Add(AppleAppAttestRootCA);
-        // chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
-
-        X509Certificate2 intermediateCert = new(x5cArray[1].GetByteString());
-        chain.ChainPolicy.ExtraStore.Add(intermediateCert);
-
         X509Certificate2 credCert = new(x5cArray[0].GetByteString());
-        if (request.AuthData.AttestedCredentialData!.AaGuid.Equals(devAaguid))
-        {
-            // Allow expired leaf cert in development environment
-            chain.ChainPolicy.VerificationTime = credCert.NotBefore.AddSeconds(1);
-        }
-
-        if (!chain.Build(credCert))
-        {
-            throw new Fido2VerificationException($"Failed to build chain in Apple AppAttest attestation: {chain.ChainStatus.FirstOrDefault().StatusInformation}");
-        }
+        X509Certificate2 intermediateCert = new(x5cArray[1].GetByteString());
+        VerifyCertification(credCert, intermediateCert, request.AuthData.AttestedCredentialData.AaGuid);
 
         // 2. Create clientDataHash as the SHA256 hash of the one-time challenge your server sends to your app before performing the attestation, and append that hash to the end of the authenticator data (authData from the decoded object).
         // 3. Generate a new SHA256 hash of the composite item to create nonce.
@@ -128,5 +113,48 @@ internal sealed class AppleAppAttest : AttestationVerifier
         }
 
         return (attType, trustPath);
+    }
+
+    private void VerifyCertification(X509Certificate2 credCert, X509Certificate2 intermediateCert, Guid aaGuid)
+    {
+        // Verify the validity of the certificates using Apple's App Attest root certificate.
+        var chain = new X509Chain();
+        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
+        chain.ChainPolicy.VerificationFlags = X509VerificationFlags.AllowUnknownCertificateAuthority;
+        chain.ChainPolicy.ExtraStore.Add(AppleAppAttestRootCA);
+        // chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust; // solved by CryptoUtils.AcceptMathcingUntrustedRoot
+        chain.ChainPolicy.ExtraStore.Add(intermediateCert);
+
+        if (aaGuid.Equals(devAaguid))
+        {
+            // Allow expired leaf cert in development environment
+            chain.ChainPolicy.VerificationTime = credCert.NotBefore.AddSeconds(1);
+        }
+
+        if (!chain.Build(credCert)) // building chain with trusted root to see different issues like expired cert
+        {
+            ThrowFido2VerificationException(chain, ignoreStatusFlag: X509ChainStatusFlags.UntrustedRoot);
+        }
+
+        chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
+        if (!chain.Build(credCert) && // building chain to check for untrusted root error and accept it explicitly
+            !CryptoUtils.AcceptMathcingUntrustedRoot(chain, chain.ChainElements[chain.ChainElements.Count - 1].Certificate)) 
+        {
+            ThrowFido2VerificationException(chain);
+        }
+
+        // if the chain validates, make sure one of the root certificate is one of the chain elements
+        // skip the first element, as that is the attestation cert
+        if (chain.ChainElements.Cast<X509ChainElement>()
+            .Skip(1)
+            .Any(x => x.Certificate.Thumbprint.Equals(AppleAppAttestRootCA.Thumbprint, StringComparison.Ordinal)))
+            return;
+
+        throw new Fido2VerificationException($"Failed to build chain in Apple AppAttest attestation: root certification is not found in certification chain");
+    }
+
+    private void ThrowFido2VerificationException(X509Chain chain, X509ChainStatusFlags ignoreStatusFlag = X509ChainStatusFlags.NoError)
+    {
+        throw new Fido2VerificationException($"Failed to build chain in Apple AppAttest attestation: {chain.ChainStatus.Where(_ => _.Status != ignoreStatusFlag).FirstOrDefault().StatusInformation}");
     }
 }

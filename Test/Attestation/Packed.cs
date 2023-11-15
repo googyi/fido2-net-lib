@@ -1,4 +1,5 @@
-﻿using System.Runtime.InteropServices;
+﻿using System;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography.Xml;
@@ -758,7 +759,7 @@ public class Packed : Fido2Tests.Attestation
         rawAttestnCert[12] = 0x41;
 
         var x5c = CBORObject.NewArray()
-                .Add(CBORObject.FromObject(attestnCert.RawData))
+                .Add(CBORObject.FromObject(rawAttestnCert))
                 .Add(CBORObject.FromObject(root.RawData));
 
         byte[] signature = SignData(type, alg, curve, ecdsa: ecdsaAtt);
@@ -774,7 +775,6 @@ public class Packed : Fido2Tests.Attestation
             var ex = Assert.ThrowsAnyAsync<CryptographicException>(() => MakeAttestationResponseAsync());
             Assert.Equal("Unknown format in import.", ex.Result.Message);
         }
-
         else
         {
             var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
@@ -838,7 +838,7 @@ public class Packed : Fido2Tests.Attestation
         X509Certificate2 attestnCert;
         DateTimeOffset notBefore = DateTimeOffset.UtcNow;
         DateTimeOffset notAfter = notBefore.AddDays(2);
-        var attDN = new X500DistinguishedName("\"CN=Testing, OU=Authenticator Attestation, O=\"FIDO2-NET-LIB, Inc.\", C=US");
+        var attDN = new X500DistinguishedName("CN=Testing, OU=Authenticator Attestation, O=\"FIDO2-NET-LIB, Inc.\", C=US");
 
         using var ecdsaRoot = ECDsa.Create();
         var rootRequest = new CertificateRequest(rootDN, ecdsaRoot, HashAlgorithmName.SHA256);

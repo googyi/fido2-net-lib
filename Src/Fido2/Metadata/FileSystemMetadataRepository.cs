@@ -2,12 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
+using Newtonsoft.Json;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Fido2NetLib.Serialization;
-using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 

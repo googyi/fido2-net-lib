@@ -23,6 +23,7 @@
     <PackageReference Include="NSec.Cryptography" Version="20.2.0" />
     <PackageReference Include="PeterO.Cbor" Version="4.5.2" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.32.1" />
+    <PackageReference Include="System.Security.Cryptography.X509Certificates" Version="4.3.2" />
   </ItemGroup>
 
   <ItemGroup>

@@ -5,14 +5,15 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
+using Newtonsoft.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 using Fido2NetLib.Internal;
-using Fido2NetLib.Serialization;
 
 using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using Newtonsoft.Json.Linq;
 
 namespace Fido2NetLib;
 
@@ -54,10 +55,7 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
     {
         var req = new GetBLOBRequest(_origin);
 
-        var content = new ByteArrayContent(JsonSerializer.SerializeToUtf8Bytes(req, FidoSerializerContext.Default.GetBLOBRequest))
-        {
-            Headers = { { "Content-Type", "application/json" } }
-        };
+        var content = new StringContent(JsonConvert.SerializeObject(req), Encoding.UTF8, "application/json");
 
         using var response = await _httpClient.PostAsync(_getEndpointsUrl, content, cancellationToken);
 
@@ -66,48 +64,45 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
             throw new Exception($"{_getEndpointsUrl} returned {response.StatusCode} error");
         }
 
-        using (var responseStream = await response.Content.ReadAsStreamAsync())
-        { 
-            MDSGetEndpointResponse result = await JsonSerializer.DeserializeAsync(responseStream, FidoSerializerContext.Default.MDSGetEndpointResponse, cancellationToken);
-            var conformanceEndpoints = result!.Result;
+        MDSGetEndpointResponse result = JsonConvert.DeserializeObject<MDSGetEndpointResponse>(await response.Content.ReadAsStringAsync());
+        var conformanceEndpoints = result!.Result;
 
-            var combinedBlob = new MetadataBLOBPayload
+        var combinedBlob = new MetadataBLOBPayload
+        {
+            Number = -1,
+            NextUpdate = "2099-08-07"
+        };
+
+        var entries = new List<MetadataBLOBPayloadEntry>();
+
+        foreach (var blobUrl in conformanceEndpoints)
+        {
+            var rawBlob = await DownloadStringAsync(blobUrl);
+
+            MetadataBLOBPayload blob;
+
+            try
             {
-                Number = -1,
-                NextUpdate = "2099-08-07"
-            };
-
-            var entries = new List<MetadataBLOBPayloadEntry>();
-
-            foreach (var blobUrl in conformanceEndpoints)
-            {
-                var rawBlob = await DownloadStringAsync(blobUrl);
-
-                MetadataBLOBPayload blob;
-
-                try
-                {
-                    blob = await DeserializeAndValidateBlobAsync(rawBlob, cancellationToken);
-                }
-                catch
-                {
-                    continue;
-                }
-
-                if (string.Compare(blob.NextUpdate, combinedBlob.NextUpdate, StringComparison.InvariantCulture) < 0)
-                    combinedBlob.NextUpdate = blob.NextUpdate;
-
-                if (combinedBlob.Number < blob.Number)
-                    combinedBlob.Number = blob.Number;
-
-                entries.AddRange(blob.Entries);
-
-                combinedBlob.JwtAlg = blob.JwtAlg;
+                blob = await DeserializeAndValidateBlobAsync(rawBlob, cancellationToken);
             }
-        
-            combinedBlob.Entries = entries.ToArray();
-            return combinedBlob;
+            catch
+            {
+                continue;
+            }
+
+            if (string.Compare(blob.NextUpdate, combinedBlob.NextUpdate, StringComparison.InvariantCulture) < 0)
+                combinedBlob.NextUpdate = blob.NextUpdate;
+
+            if (combinedBlob.Number < blob.Number)
+                combinedBlob.Number = blob.Number;
+
+            entries.AddRange(blob.Entries);
+
+            combinedBlob.JwtAlg = blob.JwtAlg;
         }
+        
+        combinedBlob.Entries = entries.ToArray();
+        return combinedBlob;
     }
 
     private Task<string> DownloadStringAsync(string url)
@@ -118,6 +113,19 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
     private Task<byte[]> DownloadDataAsync(string url)
     {
         return _httpClient.GetByteArrayAsync(url);
+    }
+
+    private X509Certificate2 GetX509Certificate(string key)
+    {
+        try
+        {
+            var certBytes = Convert.FromBase64String(key);
+            return new X509Certificate2(certBytes);
+        }
+        catch (Exception ex)
+        {
+            throw new ArgumentException("Could not parse X509 certificate.", ex);
+        }
     }
 
     public async Task<MetadataBLOBPayload> DeserializeAndValidateBlobAsync(string rawBLOBJwt, CancellationToken cancellationToken = default)
@@ -131,31 +139,28 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
             throw new Fido2MetadataException("The JWT does not have the 3 expected components");
 
         var blobHeader = jwtParts[0];
-        using var jsonDoc = JsonDocument.Parse(Base64Url.Decode(blobHeader));
-        var tokenHeader = jsonDoc.RootElement;
+        var tokenHeader = JObject.Parse(Encoding.UTF8.GetString(Base64Url.Decode(blobHeader)));
 
-        var blobAlg = tokenHeader.TryGetProperty("alg", out var algEl)
-            ? algEl.GetString()!
-            : throw new Fido2MetadataException("No alg value was present in the BLOB header.");
+        var blobAlg = tokenHeader["alg"]?.Value<string>();
 
-        if (!tokenHeader.TryGetProperty("x5c", out var x5cEl))
+        if (blobAlg == null)
+            throw new Fido2MetadataException("No alg value was present in the BLOB header.");
+
+        var x5cArray = tokenHeader["x5c"] as JArray;
+        if (x5cArray == null)
         {
             throw new Fido2MetadataException("No x5c array was present in the BLOB header.");
         }
 
-        if (!x5cEl.TryDecodeArrayOfBase64EncodedBytes(out var x5cRawKeys))
-        {
-            throw new Fido2MetadataException("Malformed x5c array in the BLOB header.");
-        }
-
         var rootCert = X509CertificateHelper.CreateFromBase64String(ROOT_CERT);
-        var blobCertificates = new X509Certificate2[x5cRawKeys.Length];
-        var blobPublicKeys = new List<SecurityKey>(x5cRawKeys.Length);
+        var blobCertStrings = x5cArray.Values<string>().ToList();
+        var blobCertificates = new List<X509Certificate2>();
+        var blobPublicKeys = new List<SecurityKey>();
 
-        for (int i = 0; i < x5cRawKeys.Length; i++)
+        foreach (var certString in blobCertStrings)
         {
-            var cert = X509CertificateHelper.CreateFromRawData(x5cRawKeys[i]);
-            blobCertificates[i] = cert;
+            var cert = GetX509Certificate(certString);
+            blobCertificates.Add(cert);
 
             if (cert.GetECDsaPublicKey() is ECDsa ecdsaPublicKey)
                 blobPublicKeys.Add(new ECDsaSecurityKey(ecdsaPublicKey));
@@ -190,7 +195,7 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
             validationParameters,
             out var validatedToken);
 
-        if (blobCertificates.Length > 1)
+        if (blobCertificates.Count > 1)
         {
             certChain.ChainPolicy.ExtraStore.AddRange(blobCertificates.Skip(1).ToArray());
         }
@@ -214,7 +219,7 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
             // otherwise we have to manually validate that the root in the chain we are testing is the root we downloaded
             if (rootCert.Thumbprint.Equals(certChain.ChainElements[certChain.ChainElements.Count-1].Certificate.Thumbprint, StringComparison.Ordinal) &&
                 // and that the number of elements in the chain accounts for what was in x5c plus the root we added
-                certChain.ChainElements.Count == (x5cRawKeys.Length + 1) &&
+                certChain.ChainElements.Count == (blobCertStrings.Count + 1) &&
                 // and that the root cert has exactly one status with the value of UntrustedRoot
                 certChain.ChainElements[certChain.ChainElements.Count - 1].ChainElementStatus[0].Status == X509ChainStatusFlags.UntrustedRoot)
             {
@@ -234,7 +239,7 @@ public sealed class ConformanceMetadataRepository : IMetadataRepository
 
         var blobPayload = ((JwtSecurityToken)validatedToken).Payload.SerializeToJson();
 
-        MetadataBLOBPayload blob = JsonSerializer.Deserialize<MetadataBLOBPayload>(blobPayload)!;
+        MetadataBLOBPayload blob = JsonConvert.DeserializeObject<MetadataBLOBPayload>(blobPayload);
         blob.JwtAlg = blobAlg;
         return blob;
     }

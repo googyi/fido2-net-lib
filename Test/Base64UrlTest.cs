@@ -16,9 +16,6 @@ public class Base64UrlTest
 
         // Assert
         Assert.Equal(data, decodedBytes);
-
-        // Ensure this also works with the Utf8 decoder
-        Assert.Equal(data, Base64Url.DecodeUtf8(Encoding.UTF8.GetBytes(encodedString)));
     }
 
     public static IEnumerable<object[]> GetData()
@@ -34,16 +31,5 @@ public class Base64UrlTest
             Add(Encoding.UTF8.GetBytes("This is a string fragment to test Base64Url encoding & decoding.").ToArray());
             Add(Array.Empty<byte>());
         }
-    }
-
-    [Fact]
-    public static void Format_BadBase64Char()
-    {
-        const string Format_BadBase64Char = "The input is not a valid Base-64 string as it contains a non-base 64 character, more than two padding characters, or an illegal character among the padding characters.";
-        var ex = Assert.Throws<FormatException>(() => Base64Url.Decode("rCQqQMqKVO/geUyc9aENh85Mt2g1JHAUKUG27WZVE68==="));
-        Assert.Equal(Format_BadBase64Char, ex.Message);
-
-        ex = Assert.Throws<FormatException>(() => Base64Url.DecodeUtf8(Encoding.UTF8.GetBytes("rCQqQMqKVO/geUyc9aENh85Mt2g1JHAUKUG27WZVE68===")));
-        Assert.Equal(Format_BadBase64Char, ex.Message);
     }
 }

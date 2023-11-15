@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
@@ -95,8 +96,12 @@ public static class CryptoUtils
 
         // Let's check the simplest case first.  If subject and issuer are the same, and the attestation cert is in the list, that's all the validation we need
 
-        // We have the same singular root cert in trustpath and it is in attestationRootCertificates
-        if (trustPath.Length == 1)
+        // Conformance testing tool v1.7.15
+        // P-3
+        // Send a valid ServerAuthenticatorAttestationResponse with FULL "packed" attestation that contains batch certificate, that is simply self referenced in the metadata, and check that server succeeds
+        // We have the same singular root cert in trustpath and in attestationRootCertificates with mismatching Subject and issuer 
+        // therefore it fails validation if we check for Subject vs Issuer
+        if (trustPath.Length == 1 && trustPath[0].Subject.Equals(trustPath[0].Issuer, StringComparison.Ordinal)) // && ... should be commented out
         {
             foreach (X509Certificate2 cert in attestationRootCertificates)
             {
@@ -105,6 +110,7 @@ public static class CryptoUtils
                     return true;
                 }
             }
+             return false; // should be commented out
         }
 
         // If the attestation cert is not self signed, we will need to build a chain
@@ -130,30 +136,27 @@ public static class CryptoUtils
         if (chain.Build(trustPath[0]))
         {
             // if that validated, we should have a root for this chain now, add it to the custom trust store
-            // chain.ChainPolicy.CustomTrustStore.Clear();
-            chain.ChainPolicy.ExtraStore.Add(chain.ChainElements[chain.ChainElements.Count - 1].Certificate); // was customstore.add
+            //chain.ChainPolicy.CustomTrustStore.Clear();
+            //chain.ChainPolicy.CustomTrustStore.Add(chain.ChainElements[^1].Certificate);
 
-            // explicitly trust the custom root we just added
-            // chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust; // not existing thing in .net standard
+            //// explicitly trust the custom root we just added
+            //chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
 
             // if the attestation cert has a CDP extension, go ahead and turn on online revocation checking
-            if (!string.IsNullOrEmpty(CDPFromCertificateExts(trustPath[0].Extensions)) && !conformance)
+            if (!string.IsNullOrEmpty(CDPFromCertificateExts(trustPath[0].Extensions)))
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
-
+            
             // don't allow unknown root now that we have a custom root
             chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
 
             // now, verify chain again with all checks turned on
-            if (chain.Build(trustPath[0]))
+            if (chain.Build(trustPath[0]) || AcceptMathcingUntrustedRoot(chain, chain.ChainElements[chain.ChainElements.Count-1].Certificate))
             {
-                var chainElements = new X509ChainElement[chain.ChainElements.Count];
-                chain.ChainElements.CopyTo(chainElements, 0);
-
                 // if the chain validates, make sure one of the attestation root certificates is one of the chain elements
                 foreach (X509Certificate2 attestationRootCertificate in attestationRootCertificates)
                 {
                     // skip the first element, as that is the attestation cert
-                    if (chainElements
+                    if (chain.ChainElements.Cast<X509ChainElement>()
                         .Skip(1)
                         .Any(x => x.Certificate.Thumbprint.Equals(attestationRootCertificate.Thumbprint, StringComparison.Ordinal)))
                         return true;
@@ -164,11 +167,30 @@ public static class CryptoUtils
         return false;
     }
 
+    public static bool AcceptMathcingUntrustedRoot(X509Chain chain, X509Certificate2 rootCertToTrust)
+    {
+        if (!chain.ChainStatus.Any(status => status.Status == X509ChainStatusFlags.UntrustedRoot))
+            return false;
+
+        foreach (var element in chain.ChainElements)
+        {
+            foreach (var status in element.ChainElementStatus)
+            {
+                if (status.Status != X509ChainStatusFlags.UntrustedRoot)
+                    continue;
+
+                if (!rootCertToTrust.Thumbprint.Equals(element.Certificate.Thumbprint))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     public static byte[] SigFromEcDsaSig(byte[] ecDsaSig, int keySize)
     {
-        //var decoded = Asn1Element.Decode(ecDsaSig);
-        //var r = decoded[0].GetIntegerBytes();
-        //var s = decoded[1].GetIntegerBytes();
         var decoded = AsnElt.Decode(ecDsaSig);
         var r = decoded.Sub[0].GetOctetString();
         var s = decoded.Sub[1].GetOctetString();
@@ -281,41 +303,17 @@ public static class CryptoUtils
 
     public static bool IsCertInCRL(byte[] crl, X509Certificate2 cert)
     {
-        //var asnData = Asn1Element.Decode(crl);
+        var asnData = AsnElt.Decode(crl);
 
-        var pemCRL = System.Text.Encoding.ASCII.GetString(crl);
-        var crlBytes = PemToBytes(pemCRL);
-        var asnData = AsnElt.Decode(crlBytes);
-
-        //if (7 > asnData[0].Sequence.Count)
         if (7 > asnData.Sub[0].Sub.Length)
             return false; // empty CRL
-
-        // Certificate users MUST be able to handle serialNumber values up to 20 octets.
-
-        var certificateSerialNumber = cert.GetSerialNumber().ToArray(); // defensively copy
-
-        Array.Reverse(certificateSerialNumber); // convert to big-endian order
-
-        //var revokedAsnSequence = asnData[0][5].Sequence;
-        //for (int i = 0; i < revokedAsnSequence.Count; i++)
-        //{
-        //    ReadOnlySpan<byte> revokedSerialNumber = revokedAsnSequence[i][0].GetIntegerBytes();
-
-        //    if (revokedSerialNumber.SequenceEqual(certificateSerialNumber))
-        //    {
-        //        return true;
-        //    }
-        //}
-
-        //return false;
 
         var revokedCertificates = asnData.Sub[0].Sub[5].Sub;
         var revoked = new List<long>();
 
         foreach (AsnElt s in revokedCertificates)
         {
-            revoked.Add(BitConverter.ToInt64(s.Sub[0].GetOctetString().Reverse().ToArray(), 0));
+            revoked.Add(BitConverter.ToInt64(s.Sub[0].GetOctetString().Reverse().ToArray(), 0)); // reverse -> convert to big-endian order
         }
 
         return revoked.Contains(BitConverter.ToInt64(cert.GetSerialNumber(), 0));

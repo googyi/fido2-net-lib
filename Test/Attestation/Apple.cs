@@ -1,7 +1,7 @@
 ﻿using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 using fido2_net_lib.Test;
 
@@ -197,7 +197,7 @@ public class Apple : Fido2Tests.Attestation
             challenge = _challenge,
             origin = "https://www.passwordless.dev",
         };
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(clientData);
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(clientData));
 
         var invalidX5cStrings = StackAllocSha256(authData, clientDataJson);
 

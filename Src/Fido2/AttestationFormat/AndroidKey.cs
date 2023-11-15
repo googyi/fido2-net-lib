@@ -152,7 +152,7 @@ internal sealed class AndroidKey : AttestationVerifier
         if (x5cArray == null || x5cArray.Count == 0 ||
              x5cArray.First().Type != CBORType.ByteString ||
              x5cArray.First().GetByteString().Length == 0)
-            throw new Fido2VerificationException("Malformed x5c in android-key attestation");       
+            throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MalformedX5c_AndroidKeyAttestation);       
 
         if (!request.TryGetAlg(out var alg))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.InvalidAndroidKeyAttestationAlgorithm);

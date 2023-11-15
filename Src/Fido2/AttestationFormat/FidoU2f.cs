@@ -23,7 +23,8 @@ internal sealed class FidoU2f : AttestationVerifier
 
         // 2a. Check that x5c has exactly one element and let attCert be that element.
         //if (!(request.X5c is CborArray { Length: 1 } x5cArray && x5cArray[0] is CborByteString { Length: > 0 }))
-        if (request.X5c.Values == null || request.X5c.Values.Count != 1 ||
+        if (request.X5c == null || request.X5c.Type != CBORType.Array || 
+            request.X5c.Values == null || request.X5c.Values.Count != 1 ||
             request.X5c.Values.First().Type != CBORType.ByteString || 
             request.X5c.Values.First().GetByteString().Length == 0)
         {

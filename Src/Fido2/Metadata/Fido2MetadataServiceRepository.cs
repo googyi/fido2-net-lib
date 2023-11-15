@@ -4,13 +4,14 @@ using System.Linq;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
+using Newtonsoft.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Fido2NetLib.Serialization;
-
 using Microsoft.IdentityModel.Tokens;
+using Newtonsoft.Json.Linq;
+using System.Text;
+using System.Collections.Generic;
 
 namespace Fido2NetLib;
 
@@ -76,6 +77,19 @@ public sealed class Fido2MetadataServiceRepository : IMetadataRepository
             .GetByteArrayAsync(url);
     }
 
+    private X509Certificate2 GetX509Certificate(string certString)
+    {
+        try
+        {
+            var certBytes = Convert.FromBase64String(certString);
+            return new X509Certificate2(certBytes);
+        }
+        catch (Exception ex)
+        {
+            throw new ArgumentException("Could not parse X509 certificate.", ex);
+        }
+    }
+
     private async Task<MetadataBLOBPayload> DeserializeAndValidateBlobAsync(string rawBLOBJwt, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(rawBLOBJwt))
@@ -86,47 +100,41 @@ public sealed class Fido2MetadataServiceRepository : IMetadataRepository
         if (jwtParts.Length != 3)
             throw new ArgumentException("The JWT does not have the 3 expected components");
 
-        var blobHeaderString = jwtParts[0];
-        using var blobHeaderDoc = JsonDocument.Parse(Base64Url.Decode(blobHeaderString));
-        var blobHeader = blobHeaderDoc.RootElement;
+        var blobHeaderString = jwtParts.First();
+        var blobHeader = JObject.Parse(Encoding.UTF8.GetString(Base64Url.Decode(blobHeaderString)));
 
-        string blobAlg = blobHeader.TryGetProperty("alg", out var algEl)
-            ? algEl.GetString()!
-            : throw new Fido2MetadataException("No alg value was present in the BLOB header");
+        string blobAlg = blobHeader["alg"]?.Value<string>();
 
+        if (blobAlg == null)
+            throw new Fido2MetadataException("No alg value was present in the BLOB header");
 
-        if (!blobHeader.TryGetProperty("x5c", out var x5cEl))
-        {
+        var x5cArray = blobHeader["x5c"] as JArray;
+
+        if (x5cArray == null)
             throw new Fido2MetadataException("No x5c value was present in the BLOB header");
-        }
 
-        if (!x5cEl.TryDecodeArrayOfBase64EncodedBytes(out var x5cRawKeys))
-        {
-            throw new Fido2MetadataException("The x5c value in the BLOB header is malformed");
-        }
+        var keyStrings = x5cArray.Values<string>().ToList();
 
-        if (x5cRawKeys.Length is 0)
+        if (keyStrings.Count == 0)
         {
             throw new Fido2MetadataException("No x5c keys were present in the BLOB header");
         }
 
         var rootCert = X509CertificateHelper.CreateFromBase64String(ROOT_CERT);
-        var blobCerts = new X509Certificate2[x5cRawKeys.Length];
-        var keys = new SecurityKey[x5cRawKeys.Length];
+        var blobCerts = keyStrings.Select(o => GetX509Certificate(o)).ToArray();
+        var keys = new List<SecurityKey>();
 
-        for (int i = 0; i < blobCerts.Length; i++)
+        foreach (var certString in keyStrings)
         {
-            var cert = X509CertificateHelper.CreateFromRawData(x5cRawKeys[i]);
-
-            blobCerts[i] = cert;
+            var cert = GetX509Certificate(certString);
 
             if (cert.GetECDsaPublicKey() is ECDsa ecdsaPublicKey)
             {
-                keys[i] = new ECDsaSecurityKey(ecdsaPublicKey);
+                keys.Add(new ECDsaSecurityKey(ecdsaPublicKey));
             }
             else if (cert.GetRSAPublicKey() is RSA rsaPublicKey)
             {
-                keys[i] = new RsaSecurityKey(rsaPublicKey);
+                keys.Add(new RsaSecurityKey(rsaPublicKey));
             }
             else
             {
@@ -183,7 +191,7 @@ public sealed class Fido2MetadataServiceRepository : IMetadataRepository
             // otherwise we have to manually validate that the root in the chain we are testing is the root we downloaded
             if (rootCert.Thumbprint == certChain.ChainElements[certChain.ChainElements.Count - 1].Certificate.Thumbprint &&
                 // and that the number of elements in the chain accounts for what was in x5c plus the root we added
-                certChain.ChainElements.Count == (x5cRawKeys.Length + 1) &&
+                certChain.ChainElements.Count == (keyStrings.Count + 1) &&
                 // and that the root cert has exactly one status with the value of UntrustedRoot
                 certChain.ChainElements[certChain.ChainElements.Count - 1].ChainElementStatus[0].Status == X509ChainStatusFlags.UntrustedRoot)
             {
@@ -203,7 +211,7 @@ public sealed class Fido2MetadataServiceRepository : IMetadataRepository
 
         var blobPayload = ((JwtSecurityToken)validatedToken).Payload.SerializeToJson();
 
-        MetadataBLOBPayload blob = JsonSerializer.Deserialize<MetadataBLOBPayload>(blobPayload)!;
+        MetadataBLOBPayload blob = JsonConvert.DeserializeObject<MetadataBLOBPayload>(blobPayload);
         blob.JwtAlg = blobAlg;
         return blob;
     }

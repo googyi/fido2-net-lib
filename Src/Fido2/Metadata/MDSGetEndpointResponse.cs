@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace Fido2NetLib;
 
@@ -11,9 +12,9 @@ public sealed class MDSGetEndpointResponse
         Result = result;
     }
 
-    [JsonPropertyName("status")]
+    [JsonProperty("status")]
     public string Status { get; }
 
-    [JsonPropertyName("result")]
+    [JsonProperty("result")]
     public string[] Result { get; }
 }

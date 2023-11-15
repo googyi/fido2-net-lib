@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib.Objects.Tests;
 
@@ -13,14 +13,14 @@ public class AttestationTypeTests
     [Fact]
     public void CanSerialize()
     {
-        Assert.Equal("\"none\"", JsonSerializer.Serialize(AttestationType.None));
-        Assert.Equal("\"ecdaa\"", JsonSerializer.Serialize(AttestationType.ECDAA));
+        Assert.Equal("\"none\"", JsonConvert.SerializeObject(AttestationType.None));
+        Assert.Equal("\"ecdaa\"", JsonConvert.SerializeObject(AttestationType.ECDAA));
     }
 
     [Fact]
     public void CanDeserialize()
     {
-        Assert.Same(AttestationType.None, JsonSerializer.Deserialize<AttestationType>("\"none\""));
-        Assert.Same(AttestationType.ECDAA, JsonSerializer.Deserialize<AttestationType>("\"ecdaa\""));
+        Assert.Equal(AttestationType.None, JsonConvert.DeserializeObject<AttestationType>("\"none\""));
+        Assert.Equal(AttestationType.ECDAA, JsonConvert.DeserializeObject<AttestationType>("\"ecdaa\""));
     }
 }

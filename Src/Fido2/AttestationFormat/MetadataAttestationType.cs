@@ -1,6 +1,6 @@
 ﻿using System.Runtime.Serialization;
-using System.Text.Json.Serialization;
 using Newtonsoft.Json.Converters;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
