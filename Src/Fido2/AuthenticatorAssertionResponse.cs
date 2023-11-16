@@ -64,9 +64,10 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
         uint storedSignatureCounter,
         IsUserHandleOwnerOfCredentialIdAsync isUserHandleOwnerOfCredId,
         IMetadataService metadataService,
+        byte[] requestTokenBindingId,
         CancellationToken cancellationToken = default)
     {
-        BaseVerify(config.FullyQualifiedOrigins, options.Challenge);
+        BaseVerify(config.FullyQualifiedOrigins, options.Challenge, requestTokenBindingId);
 
         if (Raw.Type != PublicKeyCredentialType.PublicKey)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAssertionResponse, Fido2ErrorMessages.AssertionResponseNotPublicKey);
