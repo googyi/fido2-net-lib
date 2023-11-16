@@ -110,7 +110,6 @@ public sealed class CredentialCreateOptions : Fido2ResponseBase
     }
 }
 
-#nullable enable
 
 public sealed class PubKeyCredParam
 {
@@ -154,7 +153,7 @@ public sealed class PubKeyCredParam
 /// </summary>
 public sealed class PublicKeyCredentialRpEntity
 {
-    public PublicKeyCredentialRpEntity(string id, string name, string? icon = null)
+    public PublicKeyCredentialRpEntity(string id, string name, string icon = null)
     {
         Name = name;
         Id = id;
@@ -174,9 +173,9 @@ public sealed class PublicKeyCredentialRpEntity
     public string Name { get; set; }
 
     [JsonProperty("icon", NullValueHandling = NullValueHandling.Ignore)]
-    public string? Icon { get; set; }
+    public string Icon { get; set; }
 }
-#nullable disable
+
 
 /// <summary>
 /// WebAuthn Relying Parties may use the AuthenticatorSelectionCriteria dictionary to specify their requirements regarding authenticator attributes.
@@ -190,7 +189,7 @@ public class AuthenticatorSelection
     [JsonProperty("authenticatorAttachment", NullValueHandling = NullValueHandling.Ignore)]
     public AuthenticatorAttachment? AuthenticatorAttachment { get; set; }
 
-    private ResidentKeyRequirement _residentKey;
+    private ResidentKeyRequirement? _residentKey;
 
     /// <summary>
     /// Specifies the extent to which the Relying Party desires to create a client-side discoverable credential.
@@ -199,8 +198,8 @@ public class AuthenticatorSelection
     /// treating an unknown value as if the member does not exist. 
     /// If no value is given then the effective value is required if requireResidentKey is true or discouraged if it is false or absent.
     /// </summary>
-    [JsonProperty("residentKey")]
-    public ResidentKeyRequirement ResidentKey
+    [JsonProperty("residentKey", NullValueHandling = NullValueHandling.Ignore)]
+    public ResidentKeyRequirement? ResidentKey
     {
         private get => _residentKey;
         set
@@ -228,7 +227,7 @@ public class AuthenticatorSelection
         set
         {
             _requireResidentKey = value;
-            _residentKey = value ? ResidentKeyRequirement.Required : ResidentKeyRequirement.Discouraged;
+            //_residentKey = value ? ResidentKeyRequirement.Required : ResidentKeyRequirement.Discouraged;
         }
     }
 

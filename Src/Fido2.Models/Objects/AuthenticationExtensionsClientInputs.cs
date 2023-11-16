@@ -18,6 +18,7 @@ public sealed class AuthenticationExtensionsClientInputs
     /// https://www.w3.org/TR/webauthn/#sctn-appid-extension
     /// </summary>
     [JsonProperty("appid", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonIgnore]
     public string AppID { private get; set; }
 
     public string GetAppID()
@@ -37,6 +38,7 @@ public sealed class AuthenticationExtensionsClientInputs
     /// https://www.w3.org/TR/webauthn/#sctn-uvm-extension
     /// </summary>
     [JsonProperty("uvm", NullValueHandling = NullValueHandling.Ignore)]
+    [JsonIgnore]
     public bool? UserVerificationMethod { private get; set; }
 
 #nullable enable

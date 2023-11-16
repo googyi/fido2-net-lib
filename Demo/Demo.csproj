@@ -17,6 +17,9 @@
     <Folder Include="wwwroot\bulma\" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.NewtonsoftJson" Version="3.1.32" />
+  </ItemGroup>
+  <ItemGroup>
     <Content Update="Pages\custom.cshtml">
       <Pack>$(IncludeRazorContentInPack)</Pack>
     </Content>

@@ -10,8 +10,6 @@ public class AuthenticationExtensionsClientOutputs
     [JsonProperty("example.extension.bool", NullValueHandling = NullValueHandling.Ignore)]
     public bool? Example { get; set; }
 
-#nullable enable
-
     /// <summary>
     /// This extension allows WebAuthn Relying Parties that have previously registered a credential using the legacy FIDO JavaScript APIs to request an assertion.
     /// https://www.w3.org/TR/webauthn/#sctn-appid-extension
@@ -24,32 +22,32 @@ public class AuthenticationExtensionsClientOutputs
     /// https://www.w3.org/TR/webauthn/#sctn-supported-extensions-extension
     /// </summary>
     [JsonProperty("exts", NullValueHandling = NullValueHandling.Ignore)]
-    public string[]? Extensions { get; set; }
+    public string[] Extensions { get; set; }
 
     /// <summary>
     /// This extension enables use of a user verification method.
     /// https://www.w3.org/TR/webauthn/#sctn-uvm-extension
     /// </summary>
     [JsonProperty("uvm", NullValueHandling = NullValueHandling.Ignore)]
-    public ulong[][]? UserVerificationMethod { get; set; }
+    public ulong[][] UserVerificationMethod { get; set; }
 
     /// <summary>
     /// This authenticator registration extension and authentication extension provides a Relying Party with a "device continuity" signal for backup eligible credentials.
     /// https://w3c.github.io/webauthn/#sctn-device-publickey-extension
     /// </summary>
     [JsonProperty("devicePubKey", NullValueHandling = NullValueHandling.Ignore)]
-    public AuthenticationExtensionsDevicePublicKeyOutputs? DevicePubKey { get; set; }
+    public AuthenticationExtensionsDevicePublicKeyOutputs DevicePubKey { get; set; }
 
     /// <summary>
     /// This client registration extension facilitates reporting certain credential properties known by the client to the requesting WebAuthn Relying Party upon creation of a public key credential source as a result of a registration ceremony.
     /// </summary>
     [JsonProperty("credProps", NullValueHandling = NullValueHandling.Ignore)]
-    public CredentialPropertiesOutput? CredProps { get; set; }
+    public CredentialPropertiesOutput CredProps { get; set; }
 
     /// <summary>
     /// This extension allows a Relying Party to evaluate outputs from a pseudo-random function (PRF) associated with a credential.
     /// https://w3c.github.io/webauthn/#prf-extension
     /// </summary>
     [JsonProperty("prf", NullValueHandling = NullValueHandling.Ignore)]
-    public AuthenticationExtensionsPRFOutputs? PRF { get; set; }
+    public AuthenticationExtensionsPRFOutputs PRF { get; set; }
 }

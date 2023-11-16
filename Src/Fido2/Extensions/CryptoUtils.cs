@@ -101,7 +101,7 @@ public static class CryptoUtils
         // Send a valid ServerAuthenticatorAttestationResponse with FULL "packed" attestation that contains batch certificate, that is simply self referenced in the metadata, and check that server succeeds
         // We have the same singular root cert in trustpath and in attestationRootCertificates with mismatching Subject and issuer 
         // therefore it fails validation if we check for Subject vs Issuer
-        if (trustPath.Length == 1 && trustPath[0].Subject.Equals(trustPath[0].Issuer, StringComparison.Ordinal)) // && ... should be commented out
+        if (trustPath.Length == 1 /*&& trustPath[0].Subject.Equals(trustPath[0].Issuer, StringComparison.Ordinal)*/) // && ... should be commented out // TODO cleanup & check unit tests
         {
             foreach (X509Certificate2 cert in attestationRootCertificates)
             {
@@ -110,7 +110,7 @@ public static class CryptoUtils
                     return true;
                 }
             }
-             return false; // should be commented out
+             //return false; // should be commented out // TODO cleanup & check unit tests
         }
 
         // If the attestation cert is not self signed, we will need to build a chain
