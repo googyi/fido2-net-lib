@@ -66,4 +66,6 @@ public class RegisteredPublicKeyCredential : Fido2ResponseBase
     /// Storing this in combination with the above attestationObject item enables the Relying Party to re-verify the attestation signature at a later time.
     /// </summary>
     public byte[] AttestationClientDataJson { get; set; }
+
+    public MetadataBLOBPayloadEntry MetadataEntry { get; set; }
 }

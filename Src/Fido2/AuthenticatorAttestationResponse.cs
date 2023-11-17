@@ -202,7 +202,8 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
             User = originalOptions.User,
             AttestationFormat = AttestationObject.Fmt,
             AaGuid = authData.AttestedCredentialData.AaGuid,
-            DevicePublicKey = devicePublicKeyResult
+            DevicePublicKey = devicePublicKeyResult,
+            MetadataEntry = metadataEntry
         };
     }
 
