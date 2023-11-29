@@ -1,13 +1,14 @@
 ﻿using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
+using System.Text;
+using Newtonsoft.Json;
 
 using fido2_net_lib.Test;
 
 using Fido2NetLib;
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Test.Attestation;
 
@@ -20,7 +21,7 @@ public class Apple : Fido2Tests.Attestation
             "MIICRDCCAcmgAwIBAgIGAXUCfWGDMAoGCCqGSM49BAMCMEgxHDAaBgNVBAMME0FwcGxlIFdlYkF1dGhuIENBIDExEzARBgNVBAoMCkFwcGxlIEluYy4xEzARBgNVBAgMCkNhbGlmb3JuaWEwHhcNMjAxMDA3MDk0NjEyWhcNMjAxMDA4MDk1NjEyWjCBkTFJMEcGA1UEAwxANjEyNzZmYzAyZDNmZThkMTZiMzNiNTU0OWQ4MTkyMzZjODE3NDZhODNmMmU5NGE2ZTRiZWUxYzcwZjgxYjViYzEaMBgGA1UECwwRQUFBIENlcnRpZmljYXRpb24xEzARBgNVBAoMCkFwcGxlIEluYy4xEzARBgNVBAgMCkNhbGlmb3JuaWEwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAR5/lkIu1EpyAk4t1TATSs0DvpmFbmHaYv1naTlPqPm/vsD2qEnDVgE6KthwVqsokNcfb82nXHKFcUjsABKG3W3o1UwUzAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIE8DAzBgkqhkiG92NkCAIEJjAkoSIEIJxgAhVAs+GYNN/jfsYkRcieGylPeSzka5QTwyMO84aBMAoGCCqGSM49BAMCA2kAMGYCMQDaHBjrI75xAF7SXzyF5zSQB/Lg9PjTdyye+w7stiqy84K6lmo8d3fIptYjLQx81bsCMQCvC8MSN+aewiaU0bMsdxRbdDerCJJj3xJb3KZwloevJ3daCmCcrZrAPYfLp2kDOsg=",
             "MIICNDCCAbqgAwIBAgIQViVTlcen+0Dr4ijYJghTtjAKBggqhkjOPQQDAzBLMR8wHQYDVQQDDBZBcHBsZSBXZWJBdXRobiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJbmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMB4XDTIwMDMxODE4MzgwMVoXDTMwMDMxMzAwMDAwMFowSDEcMBoGA1UEAwwTQXBwbGUgV2ViQXV0aG4gQ0EgMTETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49AgEGBSuBBAAiA2IABIMuhy8mFJGBAiW59fzWu2N4tfVfP8sEW8c1mTR1/VSQRN+b/hkhF2XGmh3aBQs41FCDQBpDT7JNES1Ww+HPv8uYkf7AaWCBvvlsvHfIjd2vRqWu4d1RW1r6q5O+nAsmkaNmMGQwEgYDVR0TAQH/BAgwBgEB/wIBADAfBgNVHSMEGDAWgBQm12TZxXjCWmfRp95rEtAbY/HG1zAdBgNVHQ4EFgQU666CxP+hrFtR1M8kYQUAvmO9d4gwDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gAMGUCMQDdixo0gaX62du052V7hB4UTCe3W4dqQYbCsUdXUDNyJ+/lVEV+9kiVDGMuXEg+cMECMCyKYETcIB/P5ZvDTSkwwUh4Udlg7Wp18etKyr44zSW4l9DIBb7wx/eLB6VxxugOBw=="
         };
-        _attestationObject = new CborMap { { "fmt", "apple" } };
+        _attestationObject = CBORObject.NewMap().Add("fmt", "apple");
         var (type, alg, crv) = Fido2Tests._validCOSEParameters[0];
         X509Certificate2 root, attestnCert;
         DateTimeOffset notBefore = DateTimeOffset.UtcNow;
@@ -40,7 +41,7 @@ public class Apple : Fido2Tests.Attestation
         {
             var attRequest = new CertificateRequest(attDN, ecdsaAtt, HashAlgorithmName.SHA256);
 
-            byte[] serial = RandomNumberGenerator.GetBytes(12);
+            byte[] serial = CryptoUtils.GetRandomBytes(12);
 
             using (X509Certificate2 publicOnly = attRequest.Create(
                 root,
@@ -53,33 +54,30 @@ public class Apple : Fido2Tests.Attestation
 
             var ecParams = ecdsaAtt.ExportParameters(true);
 
-            var cpk = new CborMap {
-                { COSE.KeyCommonParameter.KeyType, type },
-                { COSE.KeyCommonParameter.Alg, alg },
-                { COSE.KeyTypeParameter.X, ecParams.Q.X },
-                { COSE.KeyTypeParameter.Y, ecParams.Q.Y },
-                { COSE.KeyTypeParameter.Crv, crv }
-            };
+            var cpk = CBORObject.NewMap()
+                .Add(COSE.KeyCommonParameter.KeyType, type)
+                .Add(COSE.KeyCommonParameter.Alg, alg)
+                .Add(COSE.KeyTypeParameter.X, ecParams.Q.X)
+                .Add(COSE.KeyTypeParameter.Y, ecParams.Q.Y)
+                .Add(COSE.KeyTypeParameter.Crv, crv);
 
-            var x = (byte[])cpk[COSE.KeyTypeParameter.X];
-            var y = (byte[])cpk[COSE.KeyTypeParameter.Y];
+            var x = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+            var y = cpk[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
             _credentialPublicKey = new CredentialPublicKey(cpk);
 
-            var X5c = new CborArray {
-                    attestnCert.RawData,
-                    root.RawData
-                };
+            var x5c = CBORObject.NewArray()
+                    .Add(attestnCert.RawData)
+                    .Add(root.RawData);
 
-            _attestationObject.Add("attStmt", new CborMap { { "x5c", X5c } });
+            _attestationObject.Add("attStmt", CBORObject.NewMap().Add("x5c", x5c));
         }
     }
 
     [Fact]
     public async Task TestAppleMissingX5c()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", CborNull.Instance);
+        _attestationObject["attStmt"].Set("x5c", null);
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal(Fido2ErrorMessages.MalformedX5c_AppleAttestation, ex.Message);
     }
@@ -87,8 +85,7 @@ public class Apple : Fido2Tests.Attestation
     [Fact]
     public async Task TestAppleX5cNotArray()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", new CborTextString("boomerang"));
+        _attestationObject["attStmt"].Set("x5c", "boomerang");
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
 
         Assert.Equal(Fido2ErrorCode.InvalidAttestation, ex.Code);
@@ -98,9 +95,8 @@ public class Apple : Fido2Tests.Attestation
     [Fact]
     public async Task TestAppleX5cCountNotOne()
     {
-        var emptyX5c = new CborArray { new byte[0], new byte[0] };
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", emptyX5c);
+        _attestationObject["attStmt"]
+            .Set("x5c", CBORObject.NewArray().Add(CBORObject.FromObject(new byte[0])).Add(CBORObject.FromObject(new byte[0])));
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
 
         Assert.Equal(Fido2ErrorCode.InvalidAttestation, ex.Code);
@@ -110,8 +106,7 @@ public class Apple : Fido2Tests.Attestation
     [Fact]
     public async Task TestAppleX5cValueNotByteString()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", new CborTextString("x"));
+        _attestationObject["attStmt"].Set("x5c", "x".ToArray());
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
 
         Assert.Equal(Fido2ErrorCode.InvalidAttestation, ex.Code);
@@ -121,8 +116,7 @@ public class Apple : Fido2Tests.Attestation
     [Fact]
     public async Task TestAppleX5cValueZeroLengthByteString()
     {
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", new CborArray { new byte[0] });
+        _attestationObject["attStmt"].Set("x5c", CBORObject.NewArray().Add(CBORObject.FromObject(new byte[0])));
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
 
         Assert.Equal(Fido2ErrorCode.InvalidAttestation, ex.Code);
@@ -141,12 +135,11 @@ public class Apple : Fido2Tests.Attestation
             .Select(x => new X509Certificate2(Convert.FromBase64String(x)))
             .ToArray();
 
-        var x5c = new CborArray {
-            trustPath[0].RawData,
-            trustPath[1].RawData
-        };
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", x5c);
+        var x5c = CBORObject.NewArray()
+            .Add(trustPath[0].RawData)
+            .Add(trustPath[1].RawData);
+
+        _attestationObject["attStmt"].Set("x5c", x5c);
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Extension with OID 1.2.840.113635.100.8.2 not found on Apple attestation credCert", ex.Result.Message);
     }
@@ -163,12 +156,11 @@ public class Apple : Fido2Tests.Attestation
             .Select(x => new X509Certificate2(Convert.FromBase64String(x)))
             .ToArray();
 
-        var x5c = new CborArray {
-            trustPath[0].RawData,
-            trustPath[1].RawData
-        };
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", x5c);
+        var x5c = CBORObject.NewArray()
+            .Add(trustPath[0].RawData)
+            .Add(trustPath[1].RawData);
+
+        _attestationObject["attStmt"].Set("x5c", x5c);
         var ex = await Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
 
         Assert.Equal(Fido2ErrorCode.InvalidAttestation, ex.Code);
@@ -182,12 +174,11 @@ public class Apple : Fido2Tests.Attestation
             .Select(x => new X509Certificate2(Convert.FromBase64String(x)))
             .ToArray();
 
-        var x5c = new CborArray {
-            trustPath[0].RawData,
-            trustPath[1].RawData
-        };
-        var attStmt = (CborMap)_attestationObject["attStmt"];
-        attStmt.Set("x5c", x5c);
+        var x5c = CBORObject.NewArray()
+            .Add(trustPath[0].RawData)
+            .Add(trustPath[1].RawData);
+
+        _attestationObject["attStmt"].Set("x5c", x5c);
         var ex = Assert.ThrowsAsync<Fido2VerificationException>(() => MakeAttestationResponseAsync());
         Assert.Equal("Mismatch between nonce and credCert attestation extension in Apple attestation", ex.Result.Message);
     }
@@ -199,14 +190,14 @@ public class Apple : Fido2Tests.Attestation
         _credentialPublicKey = new CredentialPublicKey(cpkBytes);
 
         var authData = new AuthenticatorData(_rpIdHash, _flags, _signCount, _acd, GetExtensions()).ToByteArray();
-        _attestationObject.Set("authData", new CborByteString(authData));
+        _attestationObject.Set("authData", authData);
         var clientData = new
         {
             type = "webauthn.create",
             challenge = _challenge,
             origin = "https://www.passwordless.dev",
         };
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(clientData);
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(clientData));
 
         var invalidX5cStrings = StackAllocSha256(authData, clientDataJson);
 
@@ -214,12 +205,11 @@ public class Apple : Fido2Tests.Attestation
             .Select(x => new X509Certificate2(Convert.FromBase64String(x)))
             .ToArray();
 
-        var X5c = new CborArray {
-            { trustPath[0].RawData },
-            { trustPath[1].RawData }
-        };
+        var x5c = CBORObject.NewArray()
+            .Add(trustPath[0].RawData)
+            .Add(trustPath[1].RawData);
 
-        ((CborMap)_attestationObject["attStmt"]).Set("x5c", X5c);
+        _attestationObject["attStmt"].Set("x5c", x5c);
 
         var attestationResponse = new AuthenticatorAttestationRawResponse
         {
@@ -228,7 +218,7 @@ public class Apple : Fido2Tests.Attestation
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = _attestationObject.Encode(),
+                AttestationObject = _attestationObject.EncodeToBytes(),
                 ClientDataJson = clientDataJson,
             }
         };
@@ -253,7 +243,7 @@ public class Apple : Fido2Tests.Attestation
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -276,9 +266,9 @@ public class Apple : Fido2Tests.Attestation
 
     private string[] StackAllocSha256(byte[] authData, byte[] clientDataJson)
     {
-        var data = DataHelper.Concat(authData, SHA256.HashData(clientDataJson));
+        var data = DataHelper.Concat(authData, CryptoUtils.HashData(HashAlgorithmName.SHA256, clientDataJson));
         Span<byte> dataHash = stackalloc byte[32];
-        SHA256.HashData(data, dataHash);
+        dataHash = CryptoUtils.HashData(HashAlgorithmName.SHA256, data);
 
         var invalidX5cStrings = validX5cStrings;
         var invalidCert = Convert.FromBase64String(invalidX5cStrings[0]);

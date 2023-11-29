@@ -6,9 +6,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
@@ -29,13 +29,13 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
 
     internal AuthenticatorAssertionRawResponse Raw => _raw; // accessed in Verify()
 
-    public AuthenticatorData AuthenticatorData { get; init; }
+    public AuthenticatorData AuthenticatorData { get; set; }
 
     public ReadOnlySpan<byte> Signature => _raw.Response.Signature;
 
-    public byte[]? UserHandle => _raw.Response.UserHandle;
+    public byte[] UserHandle => _raw.Response.UserHandle;
 
-    public byte[]? AttestationObject => _raw.Response.AttestationObject;
+    public byte[] AttestationObject => _raw.Response.AttestationObject;
 
     public static AuthenticatorAssertionResponse Parse(AuthenticatorAssertionRawResponse rawResponse)
     {
@@ -63,10 +63,11 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
         List<byte[]> storedDevicePublicKeys,
         uint storedSignatureCounter,
         IsUserHandleOwnerOfCredentialIdAsync isUserHandleOwnerOfCredId,
-        IMetadataService? metadataService,
+        IMetadataService metadataService,
+        byte[] requestTokenBindingId,
         CancellationToken cancellationToken = default)
     {
-        BaseVerify(config.FullyQualifiedOrigins, options.Challenge);
+        BaseVerify(config.FullyQualifiedOrigins, options.Challenge, requestTokenBindingId);
 
         if (Raw.Type != PublicKeyCredentialType.PublicKey)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAssertionResponse, Fido2ErrorMessages.AssertionResponseNotPublicKey);
@@ -118,20 +119,23 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
         // https://www.w3.org/TR/webauthn/#sctn-appid-extension
         // FIDO AppID Extension:
         // If true, the AppID was used and thus, when verifying an assertion, the Relying Party MUST expect the rpIdHash to be the hash of the AppID, not the RP ID.
-        var rpid = Raw.Extensions?.AppID ?? false ? options.Extensions?.AppID : options.RpId;
-        byte[] hashedRpId = SHA256.HashData(Encoding.UTF8.GetBytes(rpid ?? string.Empty));
-        byte[] hash = SHA256.HashData(Raw.Response.ClientDataJson);
+        var rpid = Raw.Extensions?.AppID ?? false ? options.Extensions?.GetAppID() : options.RpId;
+        byte[] hashedRpId = CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rpid ?? string.Empty));
+        byte[] hash = CryptoUtils.HashData(HashAlgorithmName.SHA256, Raw.Response.ClientDataJson);
 
         if (!authData.RpIdHash.SequenceEqual(hashedRpId))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidRpidHash, Fido2ErrorMessages.InvalidRpidHash);
 
-        // 14. Verify that the UP bit of the flags in authData is set.
-        if (!authData.UserPresent)
-            throw new Fido2VerificationException(Fido2ErrorCode.UserPresentFlagNotSet, Fido2ErrorMessages.UserPresentFlagNotSet);
+        if (options.UserVerification is UserVerificationRequirement.Required)
+        {
+            // 14. Verify that the UP bit of the flags in authData is set.
+            if (!authData.UserPresent)
+                throw new Fido2VerificationException(Fido2ErrorCode.UserPresentFlagNotSet, Fido2ErrorMessages.UserPresentFlagNotSet);
 
-        // 15. If the Relying Party requires user verification for this assertion, verify that the UV bit of the flags in authData is set.
-        if (options.UserVerification is UserVerificationRequirement.Required && !authData.UserVerified)
-            throw new Fido2VerificationException(Fido2ErrorCode.UserVerificationRequirementNotMet, Fido2ErrorMessages.UserVerificationRequirementNotMet);
+            // 15. If the Relying Party requires user verification for this assertion, verify that the UV bit of the flags in authData is set.
+            if (!authData.UserVerified)
+                throw new Fido2VerificationException(Fido2ErrorCode.UserVerificationRequirementNotMet, Fido2ErrorMessages.UserVerificationRequirementNotMet);
+        }
 
         // 16. If the credential backup state is used as part of Relying Party business logic or policy, let currentBe and currentBs be the values of the BE and BS bits, respectively, of the flags in authData.
         // Compare currentBe and currentBs with credentialRecord.BE and credentialRecord.BS and apply Relying Party policy, if any.
@@ -146,7 +150,7 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
         // 17. Verify that the values of the client extension outputs in clientExtensionResults and the authenticator extension outputs in the extensions in authData are as expected,
         // considering the client extension input values that were given in options.extensions and any specific policy of the Relying Party regarding unsolicited extensions,
         // i.e., those that were not specified as part of options.extensions. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
-        byte[]? devicePublicKeyResult = null;
+        byte[] devicePublicKeyResult = null;
         if (Raw.Extensions?.DevicePubKey is not null)
         {
             devicePublicKeyResult = DevicePublicKeyAuthentication(storedDevicePublicKeys, Raw.Extensions, AuthenticatorData, hash);
@@ -181,12 +185,12 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
         if (AttestationObject is not null)
         {
             // ... perform CBOR decoding on attestationObject to obtain the attestation statement format fmt, and the attestation statement attStmt.
-            var cborAttestation = (CborMap)CborObject.Decode(AttestationObject);
-            string fmt = (string)cborAttestation["fmt"]!;
-            var attStmt = (CborMap)cborAttestation["attStmt"]!;
+            var cborAttestation = CBORObject.DecodeFromBytes(AttestationObject);
+            string fmt = cborAttestation["fmt"].AsString();
+            var attStmt = cborAttestation["attStmt"];
 
             // 1. Verify that the AT bit in the flags field of authData is set, indicating that attested credential data is included.
-            if (!authData.HasAttestedCredentialData)
+            if (!authData.HasAttestedCredentialData || authData.AttestedCredentialData == null)
                 throw new Fido2VerificationException(Fido2ErrorCode.AttestedCredentialDataFlagNotSet, Fido2ErrorMessages.AttestedCredentialDataFlagNotSet);
 
             // 2. Verify that the credentialPublicKey and credentialId fields of the attested credential data in authData match credentialRecord.publicKey and credentialRecord.id, respectively.
@@ -206,7 +210,7 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
             //     for that attestation type and attestation statement format fmt, from a trusted source or from policy. 
             //     For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
 
-            MetadataBLOBPayloadEntry? metadataEntry = null;
+            MetadataBLOBPayloadEntry metadataEntry = null;
             if (metadataService != null)
                 metadataEntry = await metadataService.GetEntryAsync(authData.AttestedCredentialData.AaGuid, cancellationToken);
 
@@ -214,7 +218,7 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
             if (metadataService?.ConformanceTesting() is true && metadataEntry is null && attType != AttestationType.None && fmt is not "fido-u2f")
                 throw new Fido2VerificationException(Fido2ErrorCode.AaGuidNotFound, "AAGUID not found in MDS test metadata");
 
-            TrustAnchor.Verify(metadataEntry, trustPath);
+            TrustAnchor.Verify(metadataEntry, trustPath, metadataService?.ConformanceTesting() is true);
         }
 
         return new VerifyAssertionResult
@@ -237,7 +241,7 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
     /// <param name="authData"></param>
     /// <param name="hash"></param>
     /// </summary>
-    private static byte[]? DevicePublicKeyAuthentication(
+    private static byte[] DevicePublicKeyAuthentication(
         List<byte[]> storedDevicePublicKeys,
         AuthenticationExtensionsClientOutputs clientExtensionResults,
         AuthenticatorData authData,
@@ -289,7 +293,7 @@ public sealed class AuthenticatorAssertionResponse : AuthenticatorResponse
                     return null;
                 }
                 // Otherwise, check attObjForDevicePublicKey's attStmt by performing a binary equality check between the corresponding stored and extracted attStmt values.
-                else if (devicePublicKeyAuthenticatorOutput.AttStmt.Encode().SequenceEqual(matchedDpkRecords.First().AttStmt.Encode()))
+                else if (devicePublicKeyAuthenticatorOutput.AttStmt.EncodeToBytes().SequenceEqual(matchedDpkRecords.First().AttStmt.EncodeToBytes()))
                 {
                     // Note: This authenticator is not generating a fresh per-response random nonce.
                     return null;

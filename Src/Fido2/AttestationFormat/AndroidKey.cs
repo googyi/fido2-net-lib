@@ -2,16 +2,16 @@
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-
-using Fido2NetLib.Cbor;
+using Asn1;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
 internal sealed class AndroidKey : AttestationVerifier
 {
-    public static byte[]? AttestationExtensionBytes(X509ExtensionCollection exts)
+    public static byte[] AttestationExtensionBytes(X509ExtensionCollection exts)
     {
         foreach (var ext in exts)
         {
@@ -29,8 +29,8 @@ internal sealed class AndroidKey : AttestationVerifier
         // https://developer.android.com/training/articles/security-key-attestation#certificate_schema
         // attestationChallenge at index 4
 
-        var keyDescription = Asn1Element.Decode(attExtBytes);
-        return keyDescription[4].GetOctetString();
+        var keyDescription = AsnElt.Decode(attExtBytes);
+        return keyDescription.GetSub(4).GetOctetString();
     }
 
     public static bool FindAllApplicationsField(byte[] attExtBytes)
@@ -38,17 +38,17 @@ internal sealed class AndroidKey : AttestationVerifier
         // https://developer.android.com/training/articles/security-key-attestation#certificate_schema
         // check both software and tee enforced AuthorizationList objects for presence of "allApplications" tag, number 600
 
-        var keyDescription = Asn1Element.Decode(attExtBytes);
+        var keyDescription = AsnElt.Decode(attExtBytes);
 
-        var softwareEnforced = keyDescription[6].Sequence;
-        foreach (Asn1Element s in softwareEnforced)
+        var softwareEnforced = keyDescription.GetSub(6).Sub;
+        foreach (AsnElt s in softwareEnforced)
         {
             if (s.TagValue is 600)
                 return true;
         }
 
-        var teeEnforced = keyDescription[7].Sequence;
-        foreach (Asn1Element s in teeEnforced)
+        var teeEnforced = keyDescription.GetSub(7).Sub;
+        foreach (AsnElt s in teeEnforced)
         {
             if (s.TagValue is 600)
                 return true;
@@ -59,32 +59,32 @@ internal sealed class AndroidKey : AttestationVerifier
 
     public static bool IsOriginGenerated(byte[] attExtBytes)
     {
-        int softwareEnforcedOriginValue = 0;
-        int teeEnforcedOriginValue = 0;
+        long softwareEnforcedOriginValue = 0;
+        long teeEnforcedOriginValue = 0;
         // https://developer.android.com/training/articles/security-key-attestation#certificate_schema
         // origin tag is 702
-        var keyDescription = Asn1Element.Decode(attExtBytes);
+        var keyDescription = AsnElt.Decode(attExtBytes);
 
-        var softwareEnforced = keyDescription[6].Sequence;
-        foreach (Asn1Element s in softwareEnforced)
+        var softwareEnforced = keyDescription.GetSub(6).Sub;
+        foreach (AsnElt s in softwareEnforced)
         {
             switch (s.TagValue)
             {
                 case 702:
-                    softwareEnforcedOriginValue = s[0].GetInt32();
+                    softwareEnforcedOriginValue = s.Sub[0].GetInteger();
                     break;
                 default:
                     break;
             }
         }
 
-        var teeEnforced = keyDescription[7].Sequence;
-        foreach (Asn1Element s in teeEnforced)
+        var teeEnforced = keyDescription.GetSub(7).Sub;
+        foreach (AsnElt s in teeEnforced)
         {
             switch (s.TagValue)
             {
                 case 702:
-                    teeEnforcedOriginValue = s[0].GetInt32();
+                    teeEnforcedOriginValue = s.Sub[0].GetInteger();
                     break;
                 default:
                     break;
@@ -96,32 +96,32 @@ internal sealed class AndroidKey : AttestationVerifier
 
     public static bool IsPurposeSign(byte[] attExtBytes)
     {
-        int softwareEnforcedPurposeValue = 2;
-        int teeEnforcedPurposeValue = 2;
+        long softwareEnforcedPurposeValue = 2;
+        long teeEnforcedPurposeValue = 2;
         // https://developer.android.com/training/articles/security-key-attestation#certificate_schema
         // purpose tag is 1
-        var keyDescription = Asn1Element.Decode(attExtBytes);
-        var softwareEnforced = keyDescription[6].Sequence;
+        var keyDescription = AsnElt.Decode(attExtBytes);
+        var softwareEnforced = keyDescription.GetSub(6).Sub;
 
-        foreach (Asn1Element s in softwareEnforced)
+        foreach (AsnElt s in softwareEnforced)
         {
             switch (s.TagValue)
             {
                 case 1:
-                    softwareEnforcedPurposeValue = s[0][0].GetInt32();
+                    softwareEnforcedPurposeValue = s.Sub[0].Sub[0].GetInteger();
                     break;
                 default:
                     break;
             }
         }
 
-        var teeEnforced = keyDescription[7].Sequence;
-        foreach (Asn1Element s in teeEnforced)
+        var teeEnforced = keyDescription.GetSub(7).Sub;
+        foreach (AsnElt s in teeEnforced)
         {
             switch (s.TagValue)
             {
                 case 1:
-                    teeEnforcedPurposeValue = s[0][0].GetInt32();
+                    teeEnforcedPurposeValue = s.Sub[0].Sub[0].GetInteger();
                     break;
                 default:
                     break;
@@ -135,29 +135,38 @@ internal sealed class AndroidKey : AttestationVerifier
     {
         // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields
         // (handled in base class)
-        if (request.AttStmt.Count is 0)
+        if (request.AttStmt.Count == 0)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MissingAndroidKeyAttestationStatement);
 
-        if (!request.TryGetSig(out byte[]? sig))
+        if (!request.TryGetSig(out byte[] sig))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.InvalidAndroidKeyAttestationSignature);
 
         // 2. Verify that sig is a valid signature over the concatenation of authenticatorData and clientDataHash 
         // using the attestation public key in attestnCert with the algorithm specified in alg
-        if (!(request.X5c is CborArray { Length: > 0 } x5cArray))
+        //if (!(request.X5c is CborArray { Length: > 0 } x5cArray))
+        if (request.X5c == null || request.X5c.Type != CBORType.Array || request.X5c.Count == 0)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MalformedX5c_AndroidKeyAttestation);
+
+        var x5cArray = request.X5c.Values;
+
+        if (x5cArray == null || x5cArray.Count == 0 ||
+             x5cArray.First().Type != CBORType.ByteString ||
+             x5cArray.First().GetByteString().Length == 0)
+            throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MalformedX5c_AndroidKeyAttestation);       
 
         if (!request.TryGetAlg(out var alg))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.InvalidAndroidKeyAttestationAlgorithm);
 
-        var trustPath = new X509Certificate2[x5cArray.Length];
+        var trustPath = new X509Certificate2[x5cArray.Count];
 
-        for (int i = 0; i < x5cArray.Length; i++)
+        for (int i = 0; i < x5cArray.Count; i++)
         {
-            if (x5cArray[i] is CborByteString { Length: > 0 } x5cObject)
+            if (x5cArray.ElementAt(i).Type == CBORType.ByteString && x5cArray.ElementAt(i).GetByteString().Length > 0)
             {
+                var x5cObject = x5cArray.ElementAt(i).GetByteString();
                 try
                 {
-                    trustPath[i] = new X509Certificate2(x5cObject.Value);
+                    trustPath[i] = new X509Certificate2(x5cObject);
                 }
                 catch (Exception ex) when (i is 0)
                 {

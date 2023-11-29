@@ -6,19 +6,33 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-using System.Text.Json;
 
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using Fido2NetLib.Internal;
 
 using Microsoft.IdentityModel.Tokens;
+using PeterO.Cbor;
+using Newtonsoft.Json.Linq;
 
 namespace Fido2NetLib;
 
 internal sealed class AndroidSafetyNet : AttestationVerifier
 {
     private const int _driftTolerance = 0;
+
+    private X509Certificate2 GetX509Certificate(string certString)
+    {
+        try
+        {
+            var certBytes = Convert.FromBase64String(certString);
+            return new X509Certificate2(certBytes);
+        }
+        catch (Exception ex)
+        {
+            throw new ArgumentException("Could not parse X509 certificate", ex);
+        }
+    }
 
     public override (AttestationType, X509Certificate2[]) Verify(VerifyAttestationRequest request)
     {
@@ -27,13 +41,15 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
         // (handled in base class)
 
         // 2. Verify that response is a valid SafetyNet response of version ver
-        if (!request.TryGetVer(out string? ver))
+        if (!request.TryGetVer(out string ver))
         {
             throw new Fido2VerificationException(Fido2ErrorMessages.InvalidSafetyNetVersion);
         }
 
-        if (!(request.AttStmt["response"] is CborByteString { Length: > 0 } responseByteString))
+        if (request.AttStmt["response"].Type != CBORType.ByteString || request.AttStmt["response"].GetByteString().Length == 0)
             throw new Fido2VerificationException(Fido2ErrorMessages.InvalidSafetyNetResponse);
+
+        var responseByteString = request.AttStmt["response"].GetByteString();
 
         var responseJwt = Encoding.UTF8.GetString(responseByteString);
 
@@ -42,42 +58,35 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
         if (jwtComponents.Length != 3)
             throw new Fido2VerificationException(Fido2ErrorMessages.MalformedSafetyNetJwt);
 
-        byte[] jwtHeaderBytes;
+        var jwtHeaderString = jwtComponents.First();
+        JObject jwtHeaderJSON;
 
         try
         {
-            jwtHeaderBytes = Base64Url.Decode(jwtComponents[0]);
+            jwtHeaderJSON = JObject.Parse(Encoding.UTF8.GetString(Base64Url.Decode(jwtHeaderString)));
         }
         catch (FormatException)
         {
             throw new Fido2VerificationException(Fido2ErrorMessages.MalformedSafetyNetJwt);
         }
 
-        using var jwtHeaderJsonDoc = JsonDocument.Parse(jwtHeaderBytes);
-        var jwtHeaderJson = jwtHeaderJsonDoc.RootElement;
+        var x5cEl = jwtHeaderJSON["x5c"] as JArray;
 
-        if (!jwtHeaderJson.TryGetProperty("x5c", out var x5cEl))
-        {
+        if (x5cEl == null)
             throw new Fido2VerificationException("SafetyNet response JWT header missing x5c");
-        }
 
-        if (!x5cEl.TryDecodeArrayOfBase64EncodedBytes(out var x5cRawKeys))
-        {
-            throw new Fido2VerificationException("SafetyNet response JWT header has a malformed x5c value");
-        }
+        var x5cRawKeys = x5cEl.Values<string>().ToList();
 
-        if (x5cRawKeys.Length is 0)
-        {
+        if (x5cRawKeys.Count == 0)
             throw new Fido2VerificationException("No keys were present in the TOC header in SafetyNet response JWT");
-        }
 
-        var certs = new X509Certificate2[x5cRawKeys.Length];
-        var keys = new List<SecurityKey>(certs.Length);
+        var certs = new List<X509Certificate2>();
+        var keys = new List<SecurityKey>();
 
-        for (int i = 0; i < certs.Length; i++)
+        foreach (var certString in x5cRawKeys)
         {
-            var cert = X509CertificateHelper.CreateFromRawData(x5cRawKeys[i]);
-            certs[i] = cert;
+            var cert = GetX509Certificate(certString);
+            certs.Add(cert);
 
             if (cert.GetECDsaPublicKey() is ECDsa ecdsaPublicKey)
             {
@@ -109,7 +118,7 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
             throw new Fido2VerificationException("SafetyNet response security token validation failed", ex);
         }
 
-        string? nonce = null;
+        string nonce = null;
         bool? ctsProfileMatch = null;
         DateTimeOffset? timestamp = null;
 
@@ -127,7 +136,7 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
             }
             if (claim is { Type: "timestampMs", ValueType: "http://www.w3.org/2001/XMLSchema#integer64" })
             {
-                timestamp = DateTimeOffset.UnixEpoch.AddMilliseconds(double.Parse(claim.Value, CultureInfo.InvariantCulture));
+                timestamp = DateTimeHelper.UnixEpoch.AddMilliseconds(double.Parse(claim.Value, CultureInfo.InvariantCulture));
             }
         }
 
@@ -158,11 +167,11 @@ internal sealed class AndroidSafetyNet : AttestationVerifier
         }
 
         Span<byte> dataHash = stackalloc byte[32];
-        SHA256.HashData(request.Data, dataHash);
+        dataHash = CryptoUtils.HashData(HashAlgorithmName.SHA256, request.Data);
 
         if (!dataHash.SequenceEqual(nonceHash))
         {
-            throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, $"SafetyNet response nonce / hash value mismatch, nonce {Convert.ToHexString(nonceHash)}, hash {Convert.ToHexString(dataHash)}");
+            throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, $"SafetyNet response nonce / hash value mismatch, nonce {HexConverter.HexToString(nonceHash)}, hash {HexConverter.HexToString(dataHash.ToArray())}");
         }
 
         // 4. Let attestationCert be the attestation certificate

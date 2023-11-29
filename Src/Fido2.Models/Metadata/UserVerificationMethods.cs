@@ -1,5 +1,6 @@
 ﻿using System.Runtime.Serialization;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Fido2NetLib;
 
@@ -10,7 +11,7 @@ namespace Fido2NetLib;
  *
  * https://fidoalliance.org/specs/fido-uaf-v1.0-ps-20141208/fido-uaf-reg-v1.0-ps-20141208.html#user-verification-methods
  */
-[JsonConverter(typeof(FidoEnumConverter<UserVerificationMethods>))]
+[JsonConverter(typeof(StringEnumConverter))]
 public enum UserVerificationMethods
 {
     /// <summary>

@@ -1,5 +1,4 @@
 ﻿using System.Collections.Generic;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,11 +12,11 @@ namespace Fido2NetLib;
 public class Fido2 : IFido2
 {
     private readonly Fido2Configuration _config;
-    private readonly IMetadataService? _metadataService;
+    private readonly IMetadataService _metadataService;
 
     public Fido2(
         Fido2Configuration config,
-        IMetadataService? metadataService = null)
+        IMetadataService metadataService = null)
     {
         _config = config;
         _metadataService = metadataService;
@@ -31,7 +30,7 @@ public class Fido2 : IFido2
     public CredentialCreateOptions RequestNewCredential(
         Fido2User user,
         List<PublicKeyCredentialDescriptor> excludeCredentials,
-        AuthenticationExtensionsClientInputs? extensions = null)
+        AuthenticationExtensionsClientInputs extensions = null)
     {
         return RequestNewCredential(user, excludeCredentials, AuthenticatorSelection.Default, AttestationConveyancePreference.None, extensions);
     }
@@ -47,10 +46,9 @@ public class Fido2 : IFido2
         List<PublicKeyCredentialDescriptor> excludeCredentials,
         AuthenticatorSelection authenticatorSelection,
         AttestationConveyancePreference attestationPreference,
-        AuthenticationExtensionsClientInputs? extensions = null)
+        AuthenticationExtensionsClientInputs extensions = null)
     {
-        byte[] challenge = RandomNumberGenerator.GetBytes(_config.ChallengeSize);
-
+        byte[] challenge = CryptoUtils.GetRandomBytes(_config.ChallengeSize);
         return CredentialCreateOptions.Create(_config, challenge, user, authenticatorSelection, attestationPreference, excludeCredentials, extensions);
     }
 
@@ -66,10 +64,11 @@ public class Fido2 : IFido2
         AuthenticatorAttestationRawResponse attestationResponse,
         CredentialCreateOptions origChallenge,
         IsCredentialIdUniqueToUserAsyncDelegate isCredentialIdUniqueToUser,
+        byte[] requestTokenBindingId = null,
         CancellationToken cancellationToken = default)
     {
         var parsedResponse = AuthenticatorAttestationResponse.Parse(attestationResponse);
-        var success = await parsedResponse.VerifyAsync(origChallenge, _config, isCredentialIdUniqueToUser, _metadataService, cancellationToken);
+        var success = await parsedResponse.VerifyAsync(origChallenge, _config, isCredentialIdUniqueToUser, _metadataService, requestTokenBindingId, cancellationToken);
 
         // todo: Set Errormessage etc.
         return new CredentialMakeResult(
@@ -86,10 +85,9 @@ public class Fido2 : IFido2
     public AssertionOptions GetAssertionOptions(
         IEnumerable<PublicKeyCredentialDescriptor> allowedCredentials,
         UserVerificationRequirement? userVerification,
-        AuthenticationExtensionsClientInputs? extensions = null)
+        AuthenticationExtensionsClientInputs extensions = null)
     {
-        byte[] challenge = RandomNumberGenerator.GetBytes(_config.ChallengeSize);
-
+        byte[] challenge = CryptoUtils.GetRandomBytes(_config.ChallengeSize);
         return AssertionOptions.Create(_config, challenge, allowedCredentials, userVerification, extensions);
     }
 
@@ -104,6 +102,7 @@ public class Fido2 : IFido2
         List<byte[]> storedDevicePublicKeys,
         uint storedSignatureCounter,
         IsUserHandleOwnerOfCredentialIdAsync isUserHandleOwnerOfCredentialIdCallback,
+        byte[] requestTokenBindingId = null,
         CancellationToken cancellationToken = default)
     {
         var parsedResponse = AuthenticatorAssertionResponse.Parse(assertionResponse);
@@ -115,6 +114,7 @@ public class Fido2 : IFido2
                                                       storedSignatureCounter,
                                                       isUserHandleOwnerOfCredentialIdCallback,
                                                       _metadataService,
+                                                      requestTokenBindingId,
                                                       cancellationToken);
 
         return result;
@@ -125,14 +125,14 @@ public class Fido2 : IFido2
     /// </summary>
     public sealed class CredentialMakeResult : Fido2ResponseBase
     {
-        public CredentialMakeResult(string status, string errorMessage, RegisteredPublicKeyCredential? result)
+        public CredentialMakeResult(string status, string errorMessage, RegisteredPublicKeyCredential result)
         {
             Status = status;
             ErrorMessage = errorMessage;
             Result = result;
         }
 
-        public RegisteredPublicKeyCredential? Result { get; }
+        public RegisteredPublicKeyCredential Result { get; }
 
         // todo: add debuginfo?
     }

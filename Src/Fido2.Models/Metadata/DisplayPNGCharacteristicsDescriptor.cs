@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -14,48 +13,48 @@ public sealed class DisplayPNGCharacteristicsDescriptor
     /// <summary>
     /// Gets or sets the image width.
     /// </summary>
-    [JsonPropertyName("width"), Required]
+    [JsonProperty("width", Required = Required.Always)]
     public ulong Width { get; set; }
 
     /// <summary>
     /// Gets or sets the image height.
     /// </summary>
-    [JsonPropertyName("height"), Required]
+    [JsonProperty("height", Required = Required.Always)]
     public ulong Height { get; set; }
 
     /// <summary>
     /// Gets or sets the bit depth - bits per sample or per palette index.
     /// </summary>
-    [JsonPropertyName("bitDepth"), Required]
+    [JsonProperty("bitDepth", Required = Required.Always)]
     public byte BitDepth { get; set; }
 
     /// <summary>
     /// Gets or sets the color type defines the PNG image type.
     /// </summary>
-    [JsonPropertyName("colorType"), Required]
+    [JsonProperty("colorType", Required = Required.Always)]
     public byte ColorType { get; set; }
 
     /// <summary>
     /// Gets or sets the compression method used to compress the image data.
     /// </summary>
-    [JsonPropertyName("compression"), Required]
+    [JsonProperty("compression", Required = Required.Always)]
     public byte Compression { get; set; }
 
     /// <summary>
     /// Gets or sets the filter method is the preprocessing method applied to the image data before compression.
     /// </summary>
-    [JsonPropertyName("filter"), Required]
+    [JsonProperty("filter", Required = Required.Always)]
     public byte Filter { get; set; }
 
     /// <summary>
     /// Gets or sets the interlace method is the transmission order of the image data.
     /// </summary>
-    [JsonPropertyName("interlace"), Required]
+    [JsonProperty("interlace", Required = Required.Always)]
     public byte Interlace { get; set; }
 
     /// <summary>
     /// Gets or sets the palette (1 to 256 palette entries).
     /// </summary>
-    [JsonPropertyName("plte")]
+    [JsonProperty("plte")]
     public RgbPaletteEntry[] Plte { get; set; }
 }

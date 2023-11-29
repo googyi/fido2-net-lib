@@ -1,11 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text;
 
 using Fido2NetLib.Exceptions;
-using Fido2NetLib.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -22,20 +21,20 @@ public class AuthenticatorResponse
         Origin = origin;
     }
 
-    protected AuthenticatorResponse(ReadOnlySpan<byte> utf8EncodedJson)
+    protected AuthenticatorResponse(byte[] utf8EncodedJson)
     {
         if (utf8EncodedJson.Length is 0)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAuthenticatorResponse, "utf8EncodedJson may not be empty");
 
         // 1. Let JSONtext be the result of running UTF-8 decode on the value of response.clientDataJSON
-
+        var JSONtext = Encoding.UTF8.GetString(utf8EncodedJson);
         // 2. Let C, the client data claimed as collected during the credential creation, be the result of running an implementation-specific JSON parser on JSONtext
         // Note: C may be any implementation-specific data structure representation, as long as C’s components are referenceable, as required by this algorithm.
         // We call this AuthenticatorResponse
-        AuthenticatorResponse? response;
+        AuthenticatorResponse response;
         try
         {
-            response = JsonSerializer.Deserialize(utf8EncodedJson, FidoSerializerContext.Default.AuthenticatorResponse);
+            response = JsonConvert.DeserializeObject<AuthenticatorResponse>(JSONtext);
         }
         catch (Exception e) when (e is JsonException)
         {
@@ -48,21 +47,26 @@ public class AuthenticatorResponse
         Type = response.Type;
         Challenge = response.Challenge;
         Origin = response.Origin;
+        TokenBinding = response.TokenBinding;
     }
 
     public const int MAX_ORIGINS_TO_PRINT = 5;
 
-    [JsonPropertyName("type")]
+    [JsonProperty("type")]
     public string Type { get; }
 
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonPropertyName("challenge")]
+    [JsonProperty("challenge")]
     public byte[] Challenge { get; }
 
-    [JsonPropertyName("origin")]
+    [JsonProperty("origin")]
     public string Origin { get; }
 
-    protected void BaseVerify(IReadOnlySet<string> fullyQualifiedExpectedOrigins, ReadOnlySpan<byte> originalChallenge)
+    public TokenBindingDto TokenBinding { get; set; }
+
+    // todo: add TokenBinding https://www.w3.org/TR/webauthn/#dictdef-tokenbinding // todo: check this todo
+
+    protected void BaseVerify(IReadOnlyCollection<string> fullyQualifiedExpectedOrigins, ReadOnlySpan<byte> originalChallenge, byte[] requestTokenBindingId)
     {
         if (Type is not "webauthn.create" && Type is not "webauthn.get")
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAuthenticatorResponse, $"Type must be 'webauthn.create' or 'webauthn.get'. Was '{Type}'");
@@ -79,6 +83,13 @@ public class AuthenticatorResponse
         // 12. Verify that the value of C.origin matches the Relying Party's origin.
         if (!fullyQualifiedExpectedOrigins.Contains(fullyQualifiedOrigin))
             throw new Fido2VerificationException($"Fully qualified origin {fullyQualifiedOrigin} of {Origin} not equal to fully qualified original origin {string.Join(", ", fullyQualifiedExpectedOrigins.Take(MAX_ORIGINS_TO_PRINT))} ({fullyQualifiedExpectedOrigins.Count})");
+
+        // 13?. Verify that the value of C.tokenBinding.status matches the state of Token Binding for the TLS connection over which the assertion was obtained. 
+        // If Token Binding was used on that TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the Token Binding ID for the connection.
+        if (TokenBinding != null)
+        {
+            TokenBinding.Verify(requestTokenBindingId);
+        }
     }
 
     /*

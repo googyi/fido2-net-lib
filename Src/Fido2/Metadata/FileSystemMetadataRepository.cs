@@ -2,11 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text.Json;
+using Newtonsoft.Json;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Fido2NetLib.Serialization;
 
 namespace Fido2NetLib;
 
@@ -14,7 +12,7 @@ public sealed class FileSystemMetadataRepository : IMetadataRepository
 {
     private readonly string _path;
     private readonly IDictionary<Guid, MetadataBLOBPayloadEntry> _entries;
-    private MetadataBLOBPayload? _blob;
+    private MetadataBLOBPayload _blob;
 
     public FileSystemMetadataRepository(string path)
     {
@@ -22,7 +20,7 @@ public sealed class FileSystemMetadataRepository : IMetadataRepository
         _entries = new Dictionary<Guid, MetadataBLOBPayloadEntry>();
     }
 
-    public async Task<MetadataStatement?> GetMetadataStatementAsync(MetadataBLOBPayload blob, MetadataBLOBPayloadEntry entry, CancellationToken cancellationToken = default)
+    public async Task<MetadataStatement> GetMetadataStatementAsync(MetadataBLOBPayload blob, MetadataBLOBPayloadEntry entry, CancellationToken cancellationToken = default)
     {
         if (_blob is null)
             await GetBLOBAsync(cancellationToken);
@@ -35,14 +33,14 @@ public sealed class FileSystemMetadataRepository : IMetadataRepository
         return null;
     }
 
-    public async Task<MetadataBLOBPayload> GetBLOBAsync(CancellationToken cancellationToken = default)
+    public Task<MetadataBLOBPayload> GetBLOBAsync(CancellationToken cancellationToken = default)
     {
         if (Directory.Exists(_path))
         {
             foreach (var filename in Directory.GetFiles(_path))
             {
-                await using var fileStream = new FileStream(filename, FileMode.Open, FileAccess.Read);
-                MetadataStatement statement = await JsonSerializer.DeserializeAsync(fileStream, FidoModelSerializerContext.Default.MetadataStatement, cancellationToken: cancellationToken) ?? throw new NullReferenceException(nameof(statement));
+                var rawStatement = File.ReadAllText(filename);
+                var statement = JsonConvert.DeserializeObject<MetadataStatement>(rawStatement);
                 var conformanceEntry = new MetadataBLOBPayloadEntry
                 {
                     AaGuid = statement.AaGuid,
@@ -68,6 +66,6 @@ public sealed class FileSystemMetadataRepository : IMetadataRepository
             Number = 1
         };
 
-        return _blob;
+        return Task.FromResult(_blob);
     }
 }

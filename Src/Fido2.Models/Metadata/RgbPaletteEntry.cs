@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -22,19 +22,19 @@ public readonly struct RgbPaletteEntry : IEquatable<RgbPaletteEntry>
     /// <summary>
     /// Gets or sets the red channel sample value.
     /// </summary>
-    [JsonPropertyName("r")]
+    [JsonProperty("r")]
     public ushort R { get; }
 
     /// <summary>
     /// Gets or sets the green channel sample value.
     /// </summary>
-    [JsonPropertyName("g")]
+    [JsonProperty("g")]
     public ushort G { get; }
 
     /// <summary>
     /// Gets or sets the blue channel sample value.
     /// </summary>
-    [JsonPropertyName("b")]
+    [JsonProperty("b")]
     public ushort B { get; }
 
     public bool Equals(RgbPaletteEntry other)

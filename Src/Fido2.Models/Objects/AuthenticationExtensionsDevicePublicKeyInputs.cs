@@ -1,13 +1,13 @@
 ﻿namespace Fido2NetLib.Objects;
 
 using System;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 public sealed class AuthenticationExtensionsDevicePublicKeyInputs
 {
-    [JsonPropertyName("attestation")]
+    [JsonProperty("attestation")]
     public string Attestation { get; set; } = "none";
 
-    [JsonPropertyName("attestationFormats")]
+    [JsonProperty("attestationFormats")]
     public string[] AttestationFormats { get; set; } = Array.Empty<string>();
 }

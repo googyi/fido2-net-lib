@@ -1,15 +1,14 @@
-﻿using System.Formats.Cbor;
-using System.Security.Cryptography;
+﻿using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
+using Newtonsoft.Json;
 
 using Fido2NetLib;
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
+using Fido2NetLib.Internal;
 using Fido2NetLib.Objects;
-using Fido2NetLib.Serialization;
 
 using NSec.Cryptography;
+using PeterO.Cbor;
 
 namespace Test;
 
@@ -18,7 +17,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void CanDeserialize()
     {
-        var response = JsonSerializer.Deserialize<AuthenticatorResponse>("""{"type":"webauthn.get","challenge":"J4fjxBV-BNywGRJRm8JZ7znvdiZo9NINObNBpnKnJQEOtplTMF0ERuIrzrkeoO-dNMoeMZjhzqfar7eWRANvPeNFPrB5Q6zlS1ZFPf37F3suIwpXi9NCpFA_RlBSiygLmvcIOa57_QHubZQD3cv0UWtRTLslJjmgumphMc7EFN8","origin":"https://www.passwordless.dev"}""");
+        var response = JsonConvert.DeserializeObject<AuthenticatorResponse>("{\"type\":\"webauthn.get\",\"challenge\":\"J4fjxBV-BNywGRJRm8JZ7znvdiZo9NINObNBpnKnJQEOtplTMF0ERuIrzrkeoO-dNMoeMZjhzqfar7eWRANvPeNFPrB5Q6zlS1ZFPf37F3suIwpXi9NCpFA_RlBSiygLmvcIOa57_QHubZQD3cv0UWtRTLslJjmgumphMc7EFN8\",\"origin\":\"https://www.passwordless.dev\"}");
 
         Assert.Equal("webauthn.get", response.Type);
         Assert.Equal(Base64Url.Decode("J4fjxBV-BNywGRJRm8JZ7znvdiZo9NINObNBpnKnJQEOtplTMF0ERuIrzrkeoO-dNMoeMZjhzqfar7eWRANvPeNFPrB5Q6zlS1ZFPf37F3suIwpXi9NCpFA_RlBSiygLmvcIOa57_QHubZQD3cv0UWtRTLslJjmgumphMc7EFN8"), response.Challenge);
@@ -55,22 +54,22 @@ public class AuthenticatorResponseTests
     [InlineData("https://[0:0:0:0:0:0:0:1]", "https://[0:0:0:0:0:0:0:1]:443")]
     public async Task TestAuthenticatorOriginsAsync(string origin, string expectedOrigin)
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = origin;
-        var acd = AttestedCredentialData.Parse(Convert.FromHexString("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
+        var acd = AttestedCredentialData.Parse(HexConverter.StringToHex("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(origin)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(origin)),
             AuthenticatorFlags.UP | AuthenticatorFlags.AT,
             0,
             acd
         ).ToByteArray();
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp
-        });
+        }));
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
             Type = PublicKeyCredentialType.PublicKey,
@@ -78,11 +77,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "none" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add( "fmt", "none")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -107,7 +106,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -158,21 +157,21 @@ public class AuthenticatorResponseTests
     [InlineData("http://[0:0:0:0:0:0:0:1]", "https://[0:0:0:0:0:0:0:1]:443")]
     public void TestAuthenticatorOriginsFail(string origin, string expectedOrigin)
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = origin;
-        var acd = AttestedCredentialData.Parse(Convert.FromHexString("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
+        var acd = AttestedCredentialData.Parse(HexConverter.StringToHex("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(origin)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(origin)),
             AuthenticatorFlags.UP | AuthenticatorFlags.AT,
             0,
             acd
         ).ToByteArray();
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -181,11 +180,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "none" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "none")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -210,7 +209,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -235,13 +234,13 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationRawResponse()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var challenge = CryptoUtils.GetRandomBytes(128);
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             Type = "webauthn.create",
             Challenge = challenge,
             Origin = "https://www.passwordless.dev",
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -250,14 +249,14 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData
             {
-                AttestationObject = new CborMap().Encode(),
+                AttestationObject = CBORObject.NewMap().EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
             Extensions = new AuthenticationExtensionsClientOutputs
             {
                 AppID = true,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -283,7 +282,7 @@ public class AuthenticatorResponseTests
         Assert.Equal(clientDataJson, rawResponse.Response.ClientDataJson);
         Assert.True(rawResponse.Extensions.AppID);
         Assert.Equal(new string[] { "foo", "bar" }, rawResponse.Extensions.Extensions);
-        Assert.Equal("test", rawResponse.Extensions.Example);
+        Assert.Equal(true, rawResponse.Extensions.Example);
         Assert.Equal((ulong)4, rawResponse.Extensions.UserVerificationMethod[0][0]);
         Assert.True(rawResponse.Extensions.PRF.Enabled);
         Assert.Equal(rawResponse.Extensions.PRF.Results.First, new byte[] { 0xf1, 0xd0 });
@@ -345,9 +344,9 @@ public class AuthenticatorResponseTests
         Assert.Equal(Fido2ErrorMessages.InvalidAttestationObject, ex.Message);
         Assert.Equal(Fido2ErrorCode.InvalidAttestationObject, ex.Code);
 
-        var innerEx = (CborContentException)ex.InnerException;
+        var innerEx = (CBORException)ex.InnerException;
 
-        Assert.Equal("Declared definite length of CBOR data item exceeds available buffer size.", innerEx.Message);
+        Assert.Equal("Premature end of data", innerEx.Message);
     }
 
     [Theory]
@@ -376,14 +375,14 @@ public class AuthenticatorResponseTests
     [Fact]
     public async Task TestAuthenticatorAttestationResponseInvalidType()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             Type = "webauthn.get",
             Challenge = challenge,
             Origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -392,11 +391,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", new AuthenticatorData(new byte[32], default, 0, null, null).ToByteArray() }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", new AuthenticatorData(new byte[32], default, 0, null, null).ToByteArray())
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -421,7 +420,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -448,14 +447,14 @@ public class AuthenticatorResponseTests
     [InlineData(new byte[0])]
     public void TestAuthenticatorAttestationResponseInvalidRawId(byte[] value)
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -464,11 +463,11 @@ public class AuthenticatorResponseTests
             RawId = value,
             Response = new AuthenticatorAttestationRawResponse.ResponseData
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", new AuthenticatorData(new byte[32], default, 0, null, null).ToByteArray() }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", new AuthenticatorData(new byte[32], default, 0, null, null).ToByteArray())
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -493,7 +492,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -518,14 +517,14 @@ public class AuthenticatorResponseTests
     [Fact]
     public async Task TestAuthenticatorAttestationResponseInvalidRawType()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -534,11 +533,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", new AuthenticatorData(new byte[32], default, 0, null, null).ToByteArray() }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", new AuthenticatorData(new byte[32], default, 0, null, null).ToByteArray())
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -563,7 +562,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -588,21 +587,21 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationResponseRpidMismatch()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authData = new AuthenticatorData(
-            SHA256.HashData("passwordless.dev"u8),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes("passwordless.dev")),
             AuthenticatorFlags.UV,
             0,
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -611,11 +610,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -640,7 +639,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -666,21 +665,21 @@ public class AuthenticatorResponseTests
     [Fact]
     public async Task TestAuthenticatorAttestationResponseNotUserPresentAsync()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(rp)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)),
             AuthenticatorFlags.UV,
             0,
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -689,12 +688,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
-
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -719,7 +717,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -746,21 +744,21 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationResponseBackupEligiblePolicyRequired()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(rp)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)),
             AuthenticatorFlags.UP | AuthenticatorFlags.UV,
             0,
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -769,11 +767,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -798,7 +796,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User"
             },
             Timeout = 60000,
@@ -824,21 +822,21 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationResponseBackupEligiblePolicyDisallowed()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(rp)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)),
             AuthenticatorFlags.UP | AuthenticatorFlags.UV | AuthenticatorFlags.BE,
             0,
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -847,11 +845,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -876,7 +874,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -902,21 +900,21 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationResponseNoAttestedCredentialData()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(rp)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)),
             AuthenticatorFlags.UP | AuthenticatorFlags.UV,
             0,
             null
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -925,11 +923,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -954,7 +952,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -979,22 +977,22 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationResponseUnknownAttestationType()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        var acd = AttestedCredentialData.Parse(Convert.FromHexString("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
+        var acd = AttestedCredentialData.Parse(HexConverter.StringToHex("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(rp)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)),
             AuthenticatorFlags.AT | AuthenticatorFlags.UP | AuthenticatorFlags.UV,
             0,
             acd
         ).ToByteArray();
 
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -1003,11 +1001,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "testing" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "testing")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -1032,7 +1030,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -1058,21 +1056,21 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationResponseNotUniqueCredId()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        var acd = AttestedCredentialData.Parse(Convert.FromHexString("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
+        var acd = AttestedCredentialData.Parse(HexConverter.StringToHex("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(rp)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)),
             AuthenticatorFlags.AT | AuthenticatorFlags.UP | AuthenticatorFlags.UV,
             0,
             acd
         ).ToByteArray();
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -1081,11 +1079,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "none" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "none")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -1110,7 +1108,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -1135,21 +1133,21 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAttestationResponseUVRequired()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
-        var acd = AttestedCredentialData.Parse(Convert.FromHexString("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
+        var acd = AttestedCredentialData.Parse(HexConverter.StringToHex("000000000000000000000000000000000040FE6A3263BE37D101B12E57CA966C002293E419C8CD0106230BC692E8CC771221F1DB115D410F826BDB98AC642EB1AEB5A803D1DBC147EF371CFDB1CEB048CB2CA5010203262001215820A6D109385AC78E5BF03D1C2E0874BE6DBBA40B4F2A5F2F1182456565534F672822582043E1082AF3135B40609379AC474258AAB397B8861DE441B44E83085D1C6BE0D0"));
         var authData = new AuthenticatorData(
-            SHA256.HashData(Encoding.UTF8.GetBytes(rp)),
+            CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)),
             AuthenticatorFlags.AT | AuthenticatorFlags.UP,
             0,
             acd
         ).ToByteArray();
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             type = "webauthn.create",
             challenge = challenge,
             origin = rp,
-        });
+        }));
 
         var rawResponse = new AuthenticatorAttestationRawResponse
         {
@@ -1158,11 +1156,11 @@ public class AuthenticatorResponseTests
             RawId = new byte[] { 0xf1, 0xd0 },
             Response = new AuthenticatorAttestationRawResponse.ResponseData()
             {
-                AttestationObject = new CborMap {
-                    { "fmt", "none" },
-                    { "attStmt", new CborMap() },
-                    { "authData", authData }
-                }.Encode(),
+                AttestationObject = CBORObject.NewMap()
+                    .Add("fmt", "none")
+                    .Add("attStmt", CBORObject.NewMap())
+                    .Add("authData", authData)
+                .EncodeToBytes(),
                 ClientDataJson = clientDataJson
             },
         };
@@ -1187,7 +1185,7 @@ public class AuthenticatorResponseTests
             User = new Fido2User
             {
                 Name = "testuser",
-                Id = "testuser"u8.ToArray(),
+                Id = Encoding.UTF8.GetBytes("testuser"),
                 DisplayName = "Test User",
             },
             Timeout = 60000,
@@ -1212,13 +1210,13 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionRawResponse()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
-        var clientDataJson = JsonSerializer.SerializeToUtf8Bytes(new
+        var challenge = CryptoUtils.GetRandomBytes(128);
+        var clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(new
         {
             Type = "webauthn.get",
             Challenge = challenge,
             Origin = "https://www.passwordless.dev",
-        });
+        }));
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse
         {
@@ -1238,7 +1236,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = true,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1266,7 +1264,7 @@ public class AuthenticatorResponseTests
         Assert.Equal(new byte[] { 0xf1, 0xd0 }, assertionResponse.Response.UserHandle);
         Assert.True(assertionResponse.Extensions.AppID);
         Assert.Equal(new string[] { "foo", "bar" }, assertionResponse.Extensions.Extensions);
-        Assert.Equal("test", assertionResponse.Extensions.Example);
+        Assert.Equal(true, assertionResponse.Extensions.Example);
         Assert.Equal((ulong)4, assertionResponse.Extensions.UserVerificationMethod[0][0]);
         Assert.True(assertionResponse.Extensions.PRF.Enabled);
         Assert.Equal(new byte[] { 0xf1, 0xd0 }, assertionResponse.Extensions.PRF.Results.First);
@@ -1276,7 +1274,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionTypeNotPublicKey()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -1284,7 +1282,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1298,7 +1296,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 }
@@ -1314,7 +1312,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1345,7 +1343,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionIdMissing()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -1353,7 +1351,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1367,7 +1365,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -1382,7 +1380,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1413,7 +1411,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionRawIdMissing()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -1422,7 +1420,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1436,7 +1434,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -1451,7 +1449,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1482,7 +1480,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionUserHandleEmpty()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -1490,7 +1488,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1504,7 +1502,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = Array.Empty<byte>(),
@@ -1520,7 +1518,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1551,7 +1549,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionUserHandleNotOwnerOfPublicKey()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -1559,7 +1557,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1573,7 +1571,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -1589,7 +1587,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1620,7 +1618,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionTypeNotWebAuthnGet()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.create",
@@ -1628,7 +1626,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1642,7 +1640,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -1658,7 +1656,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1689,7 +1687,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionAppId()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -1698,7 +1696,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1713,7 +1711,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 }
@@ -1729,7 +1727,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = true,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1760,7 +1758,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionInvalidRpIdHash()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -1769,7 +1767,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1783,7 +1781,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes("https://foo.bar")), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes("https://foo.bar")), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -1799,7 +1797,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1830,7 +1828,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionUPRequirementNotMet()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -1839,7 +1837,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1854,7 +1852,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), 0, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), 0, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -1870,7 +1868,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1900,7 +1898,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionUVPolicyNotMet()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -1909,7 +1907,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1924,7 +1922,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -1940,7 +1938,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -1970,7 +1968,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionBEPolicyRequired()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -1978,7 +1976,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -1992,7 +1990,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -2008,7 +2006,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -2039,7 +2037,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionBEPolicyDisallow()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -2047,7 +2045,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2061,7 +2059,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV | AuthenticatorFlags.BE, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV | AuthenticatorFlags.BE, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -2077,7 +2075,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -2108,7 +2106,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionBSPolicyRequired()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -2116,7 +2114,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2130,7 +2128,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -2146,7 +2144,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -2177,7 +2175,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionBSPolicyDisallow()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
         var authenticatorResponse = new AuthenticatorResponse(
             type: "webauthn.get",
@@ -2185,7 +2183,7 @@ public class AuthenticatorResponseTests
             origin: rp
         );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2199,7 +2197,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV | AuthenticatorFlags.BS, 0, null).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV | AuthenticatorFlags.BS, 0, null).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -2215,7 +2213,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -2246,7 +2244,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionStoredPublicKeyMissing()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -2255,7 +2253,7 @@ public class AuthenticatorResponseTests
            origin: rp
        );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2269,7 +2267,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null, new Extensions(new byte[] { 0x42 })).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null, new Extensions(new byte[] { 0x42 })).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -2285,7 +2283,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -2315,7 +2313,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionInvalidSignature()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -2324,7 +2322,7 @@ public class AuthenticatorResponseTests
            origin: rp
        );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2338,7 +2336,7 @@ public class AuthenticatorResponseTests
 
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse()
         {
-            AuthenticatorData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null, new Extensions(new byte[] { 0x42 })).ToByteArray(),
+            AuthenticatorData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 0, null, new Extensions(new byte[] { 0x42 })).ToByteArray(),
             Signature = new byte[] { 0xf1, 0xd0 },
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
@@ -2354,7 +2352,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]
@@ -2385,7 +2383,7 @@ public class AuthenticatorResponseTests
     [Fact]
     public void TestAuthenticatorAssertionSignCountSignature()
     {
-        var challenge = RandomNumberGenerator.GetBytes(128);
+        var challenge = CryptoUtils.GetRandomBytes(128);
         var rp = "https://www.passwordless.dev";
 
         var authenticatorResponse = new AuthenticatorResponse(
@@ -2394,7 +2392,7 @@ public class AuthenticatorResponseTests
            origin: rp
        );
 
-        byte[] clientDataJson = JsonSerializer.SerializeToUtf8Bytes(authenticatorResponse, FidoSerializerContext.Default.AuthenticatorResponse);
+        byte[] clientDataJson = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(authenticatorResponse));
 
         var options = new AssertionOptions
         {
@@ -2406,7 +2404,7 @@ public class AuthenticatorResponseTests
             }
         };
 
-        var authData = new AuthenticatorData(SHA256.HashData(Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 1, null, new Extensions(new byte[] { 0x42 })).ToByteArray();
+        var authData = new AuthenticatorData(CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(rp)), AuthenticatorFlags.UP | AuthenticatorFlags.UV, 1, null, new Extensions(new byte[] { 0x42 })).ToByteArray();
 
         fido2_net_lib.Test.Fido2Tests.MakeEdDSA(out _, out var publicKey, out var expandedPrivateKey);
         Key privateKey = Key.Import(SignatureAlgorithm.Ed25519, expandedPrivateKey, KeyBlobFormat.RawPrivateKey);
@@ -2415,7 +2413,7 @@ public class AuthenticatorResponseTests
         var assertion = new AuthenticatorAssertionRawResponse.AssertionResponse
         {
             AuthenticatorData = authData,
-            Signature = SignatureAlgorithm.Ed25519.Sign(privateKey, DataHelper.Concat(authData, SHA256.HashData(clientDataJson))),
+            Signature = SignatureAlgorithm.Ed25519.Sign(privateKey, DataHelper.Concat(authData, CryptoUtils.HashData(HashAlgorithmName.SHA256, clientDataJson))),
             ClientDataJson = clientDataJson,
             UserHandle = new byte[] { 0xf1, 0xd0 },
         };
@@ -2430,7 +2428,7 @@ public class AuthenticatorResponseTests
             {
                 AppID = false,
                 Extensions = new string[] { "foo", "bar" },
-                Example = "test",
+                Example = true,
                 UserVerificationMethod = new ulong[][]
                 {
                     new ulong[]

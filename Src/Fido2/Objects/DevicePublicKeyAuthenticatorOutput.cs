@@ -1,8 +1,7 @@
 ﻿namespace Fido2NetLib.Objects;
 
 using System;
-
-using Fido2NetLib.Cbor;
+using PeterO.Cbor;
 
 public sealed class DevicePublicKeyAuthenticatorOutput
 {
@@ -14,19 +13,19 @@ public sealed class DevicePublicKeyAuthenticatorOutput
 
     private readonly byte[] _nonce;
 
-    internal CborMap _map;
+    internal CBORObject _map;
 
-    internal DevicePublicKeyAuthenticatorOutput(CborMap map)
+    internal DevicePublicKeyAuthenticatorOutput(CBORObject map)
     {
-        AaGuid = new Guid((byte[])map["aaguid"]!);
-        DevicePublicKey = new CredentialPublicKey((byte[])map["dpk"]!);
-        Scope = (uint)map["scope"]!;
-        _nonce = (byte[])map["nonce"]!;
-        Fmt = (string)map["fmt"]!;
-        AttStmt = (CborMap)map["attStmt"]!;
+        AaGuid = new Guid(map["aaguid"].GetByteString()); //new Guid((byte[])map["aaguid"]!);
+        DevicePublicKey = new CredentialPublicKey(map["dpk"].GetByteString()); // new CredentialPublicKey((byte[])map["dpk"]!);
+        Scope = map["scope"].ToObject<uint>(); // (uint)map["scope"];
+        _nonce = map["nonce"].GetByteString(); //(byte[])map["nonce"]!;
+        Fmt = map["fmt"].AsString(); //(string)map["fmt"]!;
+        AttStmt = map["attStmt"]!;
         EpAtt = false;
         if ((Fmt is "enterprise") && map["epAtt"] is not null)
-            EpAtt = (bool)map["epAtt"]!;
+            EpAtt = map["epAtt"].AsBoolean(); // (bool)map["epAtt"]!;
         _map = map;
     }
 
@@ -69,7 +68,7 @@ public sealed class DevicePublicKeyAuthenticatorOutput
     /// <summary>
     /// A CborMap encoded attestation statement.
     /// </summary>
-    public CborMap AttStmt { get; }
+    public CBORObject AttStmt { get; }
 
     /// <summary>
     /// An optional boolean that indicates whether the attestation statement contains uniquely identifying information.
@@ -83,11 +82,11 @@ public sealed class DevicePublicKeyAuthenticatorOutput
 
     public ReadOnlySpan<byte> GetAuthenticationMatcher() => DataHelper.Concat(AaGuid.ToByteArray(), DevicePublicKey.GetBytes());
 
-    public byte[] Encode() => _map.Encode();
+    public byte[] Encode() => _map.EncodeToBytes();
 
     public static DevicePublicKeyAuthenticatorOutput Parse(byte[] attObjForDevicePublicKey)
     {
-        var cbor = (CborMap)CborObject.Decode(attObjForDevicePublicKey);
+        var cbor = CBORObject.DecodeFromBytes(attObjForDevicePublicKey);
 
         return new DevicePublicKeyAuthenticatorOutput(cbor);
     }
