@@ -219,7 +219,6 @@ public class AuthenticatorSelection
     /// <summary>
     /// This member describes the Relying Parties' requirements regarding resident credentials. If the parameter is set to true, the authenticator MUST create a client-side-resident public key credential source when creating a public key credential.
     /// </summary>
-    [Obsolete("Use property ResidentKey.")]
     [JsonProperty("requireResidentKey")]
     public bool RequireResidentKey
     {
