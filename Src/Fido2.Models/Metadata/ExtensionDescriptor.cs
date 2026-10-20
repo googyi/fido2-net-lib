@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -14,7 +13,7 @@ public class ExtensionDescriptor
     /// <summary>
     /// Gets or sets the identifier that identifies the extension.
     /// </summary>
-    [JsonPropertyName("id"), Required]
+    [JsonProperty("id", Required = Required.Always)]
     public string Id { get; set; }
 
     /// <summary>
@@ -24,7 +23,7 @@ public class ExtensionDescriptor
     /// <remarks>
     /// The TAG of the extension if this was assigned. TAGs are assigned to extensions if they could appear in an assertion. 
     /// </remarks>
-    [JsonPropertyName("tag")]
+    [JsonProperty("tag")]
     public ushort Tag { get; set; }
 
     /// <summary>
@@ -34,7 +33,7 @@ public class ExtensionDescriptor
     /// <remarks>
     /// This field MAY be missing or it MAY be empty.
     /// </remarks>
-    [JsonPropertyName("data")]
+    [JsonProperty("data")]
     public string Data { get; set; }
 
     /// <summary>
@@ -46,6 +45,6 @@ public class ExtensionDescriptor
     ///     <item>A value of true indicates that unknown extensions MUST result in an error.</item>
     /// </list>
     /// </remarks>
-    [JsonPropertyName("fail_if_unknown"), Required]
+    [JsonProperty("fail_if_unknown", Required = Required.Always)]
     public bool Fail_If_Unknown { get; set; }
 }

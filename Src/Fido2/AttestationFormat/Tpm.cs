@@ -1,14 +1,13 @@
 ﻿using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
-using System.Formats.Asn1;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
-
-using Fido2NetLib.Cbor;
+using Asn1;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
@@ -47,7 +46,7 @@ internal sealed class Tpm : AttestationVerifier
     {
         // 1. Verify that attStmt is valid CBOR conforming to the syntax defined above and perform CBOR decoding on it to extract the contained fields.
         // (handled in base class)
-        if (!request.TryGetSig(out byte[]? sig))
+        if (!request.TryGetSig(out byte[] sig))
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.InvalidTpmAttestationSignature);
 
         if (!(request.TryGetVer(out var ver) && ver is "2.0"))
@@ -55,20 +54,22 @@ internal sealed class Tpm : AttestationVerifier
 
         // 2. Verify that the public key specified by the parameters and unique fields of pubArea
         // is identical to the credentialPublicKey in the attestedCredentialData in authenticatorData
-        PubArea? pubArea = null;
-        if (request.AttStmt["pubArea"] is CborByteString { Length: > 0 } pubAreaObject)
+        PubArea pubArea = null;
+        if (request.AttStmt["pubArea"] != null &&
+            request.AttStmt["pubArea"].Type == CBORType.ByteString &&
+            request.AttStmt["pubArea"].GetByteString().Length > 0)
         {
-            pubArea = new PubArea(pubAreaObject.Value);
+            pubArea = new PubArea(request.AttStmt["pubArea"].GetByteString());
         }
 
         if (pubArea is null || pubArea.Unique is null || pubArea.Unique.Length is 0)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "Missing or malformed pubArea");
 
-        int coseKty = (int)request.CredentialPublicKey[COSE.KeyCommonParameter.KeyType];
+        int coseKty = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyCommonParameter.KeyType)].AsInt32();
         if (coseKty is 3) // RSA
         {
-            ReadOnlySpan<byte> coseMod = (byte[])request.CredentialPublicKey[COSE.KeyTypeParameter.N]; // modulus 
-            ReadOnlySpan<byte> coseExp = (byte[])request.CredentialPublicKey[COSE.KeyTypeParameter.E]; // exponent
+            ReadOnlySpan<byte> coseMod = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyTypeParameter.N)].GetByteString(); // modulus 
+            ReadOnlySpan<byte> coseExp = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyTypeParameter.E)].GetByteString(); // exponent
 
             if (!coseMod.SequenceEqual(pubArea.Unique))
                 throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "Public key mismatch between pubArea and credentialPublicKey");
@@ -78,9 +79,9 @@ internal sealed class Tpm : AttestationVerifier
         }
         else if (coseKty is 2) // ECC
         {
-            var curve = (int)request.CredentialPublicKey[COSE.KeyTypeParameter.Crv];
-            var x = (byte[])request.CredentialPublicKey[COSE.KeyTypeParameter.X];
-            var y = (byte[])request.CredentialPublicKey[COSE.KeyTypeParameter.Y];
+            var curve = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyTypeParameter.Crv)].AsInt32();
+            var x = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyTypeParameter.X)].GetByteString();
+            var y = request.CredentialPublicKey[CBORObject.FromObject(COSE.KeyTypeParameter.Y)].GetByteString();
 
             if (pubArea.EccCurve != CoseCurveToTpm[curve])
                 throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "Curve mismatch between pubArea and credentialPublicKey");
@@ -96,9 +97,16 @@ internal sealed class Tpm : AttestationVerifier
         // See Data field of base class
 
         // 4. Validate that certInfo is valid
-        var certInfo = request.AttStmt["certInfo"] is CborByteString { Length: > 0 } certInfoObject
-            ? new CertInfo(certInfoObject.Value)
-            : throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "CertInfo invalid parsing TPM format attStmt");
+        CertInfo certInfo = null;
+        if (null != request.AttStmt["certInfo"] &&
+            CBORType.ByteString == request.AttStmt["certInfo"].Type &&
+            0 != request.AttStmt["certInfo"].GetByteString().Length)
+        {
+            certInfo = new CertInfo(request.AttStmt["certInfo"].GetByteString());
+        }
+
+        if (null == certInfo)
+            throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "CertInfo invalid parsing TPM format attStmt");
 
         // 4a. Verify that magic is set to TPM_GENERATED_VALUE
         // Handled in CertInfo constructor, see CertInfo.Magic
@@ -124,15 +132,20 @@ internal sealed class Tpm : AttestationVerifier
         // 4e. Note that the remaining fields in the "Standard Attestation Structure" [TPMv2-Part1] section 31.2, i.e., qualifiedSigner, clockInfo and firmwareVersion are ignored. These fields MAY be used as an input to risk engines.
 
         // 5. If x5c is present, this indicates that the attestation type is not ECDAA
-        if (request.X5c is CborArray { Length: > 0 } x5cArray)
+        if (request.X5c != null && request.X5c.Type == CBORType.Array && request.X5c.Count > 0)
+        //if (request.X5c is CborArray { Length: > 0 } x5cArray)
         {
+            if (request.X5c.Values == null || request.X5c.Values.Count == 0)
+                throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, Fido2ErrorMessages.MalformedX5c_TpmAttestation);
+
+            var x5cArray = request.X5c.Values.ToArray();
             var trustPath = new X509Certificate2[x5cArray.Length];
 
             for (int i = 0; i < x5cArray.Length; i++)
             {
-                if (x5cArray[i] is CborByteString { Length: > 0 } x5cObject)
+                if (x5cArray[i] != null && x5cArray[i].Type == CBORType.ByteString && x5cArray[i].GetByteString().Length > 0)
                 {
-                    trustPath[i] = new X509Certificate2(x5cObject.Value);
+                    trustPath[i] = new X509Certificate2(x5cArray[i].GetByteString());
                 }
                 else
                 {
@@ -160,7 +173,7 @@ internal sealed class Tpm : AttestationVerifier
 
             // 5biii. The Subject Alternative Name extension MUST be set as defined in [TPMv2-EK-Profile] section 3.2.9.
             // https://www.w3.org/TR/webauthn/#tpm-cert-requirements
-            (string? tpmManufacturer, string? tpmModel, string? tpmVersion) = SANFromAttnCertExts(aikCert.Extensions);
+            (string tpmManufacturer, string tpmModel, string tpmVersion) = SANFromAttnCertExts(aikCert.Extensions);
 
             // From https://www.trustedcomputinggroup.org/wp-content/uploads/Credential_Profile_EK_V2.0_R14_published.pdf
             // "The issuer MUST include TPM manufacturer, TPM part number and TPM firmware version, using the directoryName 
@@ -176,7 +189,7 @@ internal sealed class Tpm : AttestationVerifier
                 throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "SAN missing TPMManufacturer, TPMModel, or TPMVersion from TPM attestation certificate");
             }
 
-            if (!TPMManufacturers.Contains(tpmManufacturer))
+            if (tpmManufacturer != null && !TPMManufacturers.Contains(tpmManufacturer))
                 throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestation, "Invalid TPM manufacturer found parsing TPM attestation");
 
             // 5biiii. The Extended Key Usage extension MUST contain the "joint-iso-itu-t(2) internationalorganizations(23) 133 tcg-kp(8) tcg-kp-AIKCertificate(3)" OID.
@@ -229,11 +242,11 @@ internal sealed class Tpm : AttestationVerifier
         { 3, TpmEccCurve.TPM_ECC_NIST_P521}
     };
 
-    private static (string?, string?, string?) SANFromAttnCertExts(X509ExtensionCollection exts)
+    private static (string, string, string) SANFromAttnCertExts(X509ExtensionCollection exts)
     {
-        string? tpmManufacturer = null;
-        string? tpmModel = null;
-        string? tpmVersion = null;
+        string tpmManufacturer = null;
+        string tpmModel = null;
+        string tpmVersion = null;
 
         var foundSAN = false;
 
@@ -246,18 +259,22 @@ internal sealed class Tpm : AttestationVerifier
 
                 foundSAN = true;
 
-                var subjectAlternativeName = Asn1Element.Decode(extension.RawData);
-                subjectAlternativeName.CheckTag(new Asn1Tag(UniversalTagNumber.Sequence, isConstructed: true));
-                subjectAlternativeName.CheckMinimumSequenceLength(1);
+                var subjectAlternativeName = AsnElt.Decode(extension.RawData);
+                subjectAlternativeName.CheckConstructed();
+                subjectAlternativeName.CheckTag(AsnElt.SEQUENCE);
+                subjectAlternativeName.CheckNumSubMin(1);
 
-                if (subjectAlternativeName.Sequence.FirstOrDefault(o => o is { TagClass: TagClass.ContextSpecific, TagValue: 4 /*Octet-String */ }) is Asn1Element generalName)
+                var generalName = subjectAlternativeName.Sub.FirstOrDefault(o => o.TagClass == AsnElt.CONTEXT && o.TagValue == AsnElt.OCTET_STRING);
+
+                if (generalName != null)
                 {
                     generalName.CheckConstructed();
-                    generalName.CheckExactSequenceLength(1);
+                    generalName.CheckNumSub(1);
 
-                    var nameSequence = generalName[0];
-                    nameSequence.CheckTag(new Asn1Tag(UniversalTagNumber.Sequence, isConstructed: true));
-                    nameSequence.CheckMinimumSequenceLength(1);
+                    var nameSequence = generalName.GetSub(0);
+                    nameSequence.CheckConstructed();
+                    nameSequence.CheckTag(AsnElt.SEQUENCE);
+                    nameSequence.CheckNumSubMin(1);
 
                     /*
                      
@@ -300,36 +317,29 @@ internal sealed class Tpm : AttestationVerifier
 
                      */
 
-                    var deviceAttributes = nameSequence.Sequence;
+                    var deviceAttributes = nameSequence.Sub;
 
-                    if (deviceAttributes[0].Sequence.Count != 1)
+                    if (deviceAttributes.FirstOrDefault().Sub.Length != 1)
                     {
-                        var wrappedElements = new List<Asn1Element>(deviceAttributes[0].Sequence.Count);
-
-                        foreach (Asn1Element o in deviceAttributes[0].Sequence)
-                        {
-                            wrappedElements.Add(Asn1Element.CreateSetOf(new List<Asn1Element>(1) {
-                                Asn1Element.CreateSequence((List<Asn1Element>)o.Sequence)
-                            }));
-                        }
-
-                        deviceAttributes = wrappedElements;
+                        deviceAttributes = deviceAttributes.FirstOrDefault().Sub.Select(o => AsnElt.Make(AsnElt.SET, o)).ToArray();
                     }
 
-                    foreach (Asn1Element propertySet in deviceAttributes)
+                    foreach (AsnElt propertySet in deviceAttributes)
                     {
-                        propertySet.CheckTag(Asn1Tag.SetOf);
-                        propertySet.CheckExactSequenceLength(1);
+                        propertySet.CheckTag(AsnElt.SET);
+                        propertySet.CheckNumSub(1);
 
-                        var propertySequence = propertySet[0];
-                        propertySequence.CheckTag(Asn1Tag.Sequence);
-                        propertySequence.CheckExactSequenceLength(2);
+                        var propertySequence = propertySet.GetSub(0);
+                        propertySequence.CheckTag(AsnElt.SEQUENCE);
+                        propertySequence.CheckNumSub(2);
 
-                        var propertyOid = propertySequence[0];
-                        propertyOid.CheckTag(Asn1Tag.ObjectIdentifier);
+                        var propertyOid = propertySequence.GetSub(0);
+                        propertyOid.CheckTag(AsnElt.OBJECT_IDENTIFIER);
+                        propertyOid.CheckPrimitive();
 
-                        var propertyValue = propertySequence[1];
-                        propertyValue.CheckTag(new Asn1Tag(UniversalTagNumber.UTF8String));
+                        var propertyValue = propertySequence.GetSub(1);
+                        propertyValue.CheckTag(AsnElt.UTF8String);
+                        propertyValue.CheckPrimitive();
 
                         switch (propertyOid.GetOID())
                         {
@@ -446,11 +456,11 @@ public sealed class CertInfo
 
         Magic = AuthDataHelper.GetSizedByteArray(data, ref offset, 4);
         if (0xff544347 != BinaryPrimitives.ReadUInt32BigEndian(Magic))
-            throw new Fido2VerificationException("Bad magic number " + Convert.ToHexString(Magic));
+            throw new Fido2VerificationException("Bad magic number " + BitConverter.ToString(Magic).Replace("-", ""));
 
         Type = AuthDataHelper.GetSizedByteArray(data, ref offset, 2);
         if (0x8017 != BinaryPrimitives.ReadUInt16BigEndian(Type))
-            throw new Fido2VerificationException("Bad structure tag " + Convert.ToHexString(Type));
+            throw new Fido2VerificationException("Bad structure tag " + BitConverter.ToString(Type).Replace("-", ""));
 
         QualifiedSigner = AuthDataHelper.GetSizedByteArray(data, ref offset);
 
@@ -646,13 +656,13 @@ public sealed class PubArea
     public byte[] Alg { get; }
     public byte[] Attributes { get; }
     public byte[] Policy { get; }
-    public byte[]? Symmetric { get; }
-    public byte[]? Scheme { get; }
-    public byte[]? KeyBits { get; }
+    public byte[] Symmetric { get; }
+    public byte[] Scheme { get; }
+    public byte[] KeyBits { get; }
     public uint Exponent { get; }
-    public byte[]? CurveID { get; }
-    public byte[]? KDF { get; }
-    public byte[]? Unique { get; }
+    public byte[] CurveID { get; }
+    public byte[] KDF { get; }
+    public byte[] Unique { get; }
     public TpmEccCurve EccCurve => (TpmEccCurve)Enum.ToObject(typeof(TpmEccCurve), BinaryPrimitives.ReadUInt16BigEndian(CurveID));
     public ECPoint ECPoint { get; }
 }

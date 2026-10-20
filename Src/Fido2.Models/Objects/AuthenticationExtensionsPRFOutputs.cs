@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib.Objects;
 
@@ -10,12 +10,11 @@ public sealed class AuthenticationExtensionsPRFOutputs
     /// <summary>
     /// If PRFs are available for use with the created credential.
     /// </summary>
-    [JsonPropertyName("enabled")]
+    [JsonProperty("enabled")]
     public bool Enabled { get; set; }
     /// <summary>
     /// The results of evaluating the PRF inputs.
     /// </summary>
-    [JsonPropertyName("results")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("results", NullValueHandling = NullValueHandling.Ignore)]
     public AuthenticationExtensionsPRFValues Results { get; set; }
 }

@@ -11,7 +11,7 @@ public interface IFido2
     AssertionOptions GetAssertionOptions(
         IEnumerable<PublicKeyCredentialDescriptor> allowedCredentials,
         UserVerificationRequirement? userVerification,
-        AuthenticationExtensionsClientInputs? extensions = null);
+        AuthenticationExtensionsClientInputs extensions = null);
 
     Task<VerifyAssertionResult> MakeAssertionAsync(
         AuthenticatorAssertionRawResponse assertionResponse,
@@ -20,23 +20,25 @@ public interface IFido2
         List<byte[]> storedDevicePublicKeys,
         uint storedSignatureCounter,
         IsUserHandleOwnerOfCredentialIdAsync isUserHandleOwnerOfCredentialIdCallback,
+        byte[] requestTokenBindingId = null,
         CancellationToken cancellationToken = default);
 
     Task<Fido2.CredentialMakeResult> MakeNewCredentialAsync(
         AuthenticatorAttestationRawResponse attestationResponse,
         CredentialCreateOptions origChallenge,
         IsCredentialIdUniqueToUserAsyncDelegate isCredentialIdUniqueToUser,
+        byte[] requestTokenBindingId = null,
         CancellationToken cancellationToken = default);
 
     CredentialCreateOptions RequestNewCredential(
         Fido2User user,
         List<PublicKeyCredentialDescriptor> excludeCredentials,
-        AuthenticationExtensionsClientInputs? extensions = null);
+        AuthenticationExtensionsClientInputs extensions = null);
 
     CredentialCreateOptions RequestNewCredential(
         Fido2User user,
         List<PublicKeyCredentialDescriptor> excludeCredentials,
         AuthenticatorSelection authenticatorSelection,
         AttestationConveyancePreference attestationPreference,
-        AuthenticationExtensionsClientInputs? extensions = null);
+        AuthenticationExtensionsClientInputs extensions = null);
 }

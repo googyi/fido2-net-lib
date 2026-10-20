@@ -1,16 +1,14 @@
-﻿using System.Formats.Asn1;
-using System.Linq;
-using System.Security.Cryptography.X509Certificates;
-
-using Fido2NetLib.Cbor;
+﻿using System.Security.Cryptography.X509Certificates;
+using Asn1;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
 public abstract class AttestationVerifier
 {
-    public (AttestationType, X509Certificate2[]) Verify(CborMap attStmt, AuthenticatorData authenticatorData, byte[] clientDataHash)
+    public (AttestationType, X509Certificate2[]) Verify(CBORObject attStmt, AuthenticatorData authenticatorData, byte[] clientDataHash)
     {
         return Verify(new VerifyAttestationRequest(attStmt, authenticatorData, clientDataHash));
     }
@@ -37,55 +35,61 @@ public abstract class AttestationVerifier
 
     internal static bool IsAttnCertCACert(X509ExtensionCollection exts)
     {
-        var ext = exts.FirstOrDefault(static e => e.Oid?.Value is "2.5.29.19");
-        if (ext is X509BasicConstraintsExtension baseExt)
+        foreach (var ext in exts)
         {
-            return baseExt.CertificateAuthority;
+            if (ext.Oid.Value.Equals("2.5.29.19") && ext is X509BasicConstraintsExtension baseExt)
+            {
+                return baseExt.CertificateAuthority;
+            }
         }
-
         return true;
     }
 
-    internal static byte[]? AaguidFromAttnCertExts(X509ExtensionCollection exts)
+    internal static byte[] AaguidFromAttnCertExts(X509ExtensionCollection exts)
     {
-        byte[]? aaguid = null;
-        var ext = exts.FirstOrDefault(static e => e.Oid?.Value is "1.3.6.1.4.1.45724.1.1.4"); // id-fido-gen-ce-aaguid
-        if (ext != null)
+        byte[] aaguid = null;
+        foreach (var ext in exts)
         {
-            var decodedAaguid = Asn1Element.Decode(ext.RawData);
-            decodedAaguid.CheckTag(Asn1Tag.PrimitiveOctetString);
-            aaguid = decodedAaguid.GetOctetString();
+            if (ext.Oid.Value.Equals("1.3.6.1.4.1.45724.1.1.4")) // id-fido-gen-ce-aaguid
+            {
+                var decodedAaguid = AsnElt.Decode(ext.RawData);
+                decodedAaguid.CheckTag(AsnElt.OCTET_STRING);
+                decodedAaguid.CheckPrimitive();
+                aaguid = decodedAaguid.GetOctetString();
 
-            // The extension MUST NOT be marked as critical
-            if (ext.Critical)
-                throw new Fido2VerificationException("extension MUST NOT be marked as critical");
+                //The extension MUST NOT be marked as critical
+                if (true == ext.Critical)
+                    throw new Fido2VerificationException("extension MUST NOT be marked as critical");
+
+                break;
+            }
         }
-
         return aaguid;
     }
 
-    internal static byte U2FTransportsFromAttnCert(X509ExtensionCollection exts)
+    internal static int U2FTransportsFromAttnCert(X509ExtensionCollection exts)
     {
-        byte u2fTransports = 0;
-        var ext = exts.FirstOrDefault(e => e.Oid?.Value is "1.3.6.1.4.1.45724.2.1.1"); // id-fido-u2f-ce-transports 
-        if (ext != null)
+        var u2fTransports = 0;
+        foreach (var ext in exts)
         {
-            var decodedU2fTransports = Asn1Element.Decode(ext.RawData);
-            decodedU2fTransports.CheckPrimitive();
-
-            // some certificates seem to have this encoded as an octet string
-            // instead of a bit string, attempt to correct
-            if (decodedU2fTransports.Tag == Asn1Tag.PrimitiveOctetString)
+            if (ext.Oid.Value.Equals("1.3.6.1.4.1.45724.2.1.1"))
             {
-                ext.RawData[0] = (byte)UniversalTagNumber.BitString;
-                decodedU2fTransports = Asn1Element.Decode(ext.RawData);
+                var decodedU2fTransports = AsnElt.Decode(ext.RawData);
+                decodedU2fTransports.CheckPrimitive();
+
+                // some certificates seem to have this encoded as an octet string
+                // instead of a bit string, attempt to correct
+                if (decodedU2fTransports.TagClass == AsnElt.UNIVERSAL && decodedU2fTransports.TagValue == AsnElt.OCTET_STRING)
+                {
+                    ext.RawData[0] = AsnElt.BIT_STRING;
+                    decodedU2fTransports = AsnElt.Decode(ext.RawData);
+                }
+
+                decodedU2fTransports.CheckTag(AsnElt.BIT_STRING);
+                u2fTransports = decodedU2fTransports.GetBitString()[0];
+                break;
             }
-
-            decodedU2fTransports.CheckTag(Asn1Tag.PrimitiveBitString);
-
-            u2fTransports = decodedU2fTransports.GetBitString()[0];
         }
-
         return u2fTransports;
     }
 }

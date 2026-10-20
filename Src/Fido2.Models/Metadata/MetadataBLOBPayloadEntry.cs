@@ -1,7 +1,6 @@
 ﻿using System;
-using System.ComponentModel.DataAnnotations;
 using System.Linq;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -17,14 +16,14 @@ public sealed class MetadataBLOBPayloadEntry
     /// Gets or sets the AAID.
     /// <para>The AAID of the authenticator this metadata BLOB payload entry relates to.</para>
     /// </summary>
-    [JsonPropertyName("aaid")]
+    [JsonProperty("aaid")]
     public string Aaid { get; set; }
 
     /// <summary>
     /// Gets or sets the AAGUID.
     /// <para>The Authenticator Attestation GUID.</para>
     /// </summary>
-    [JsonPropertyName("aaguid")]
+    [JsonProperty("aaguid")]
     public Guid? AaGuid { get; set; }
 
     /// <summary>
@@ -39,37 +38,37 @@ public sealed class MetadataBLOBPayloadEntry
     /// </list>
     /// <para>FIDO U2F authenticators do not support AAID nor AAGUID, but they use attestation certificates dedicated to a single authenticator model.</para>
     /// </remarks>
-    [JsonPropertyName("attestationCertificateKeyIdentifiers")]
+    [JsonProperty("attestationCertificateKeyIdentifiers")]
     public string[] AttestationCertificateKeyIdentifiers { get; set; }
 
     /// <summary>
     /// Gets or sets the metadata statement.
     /// </summary>
-    [JsonPropertyName("metadataStatement")]
+    [JsonProperty("metadataStatement")]
     public MetadataStatement MetadataStatement { get; set; }
 
     /// <summary>
     /// Gets or sets the status of the FIDO Biometric Certification of one or more biometric components of the Authenticator.
     /// </summary>
-    [JsonPropertyName("biometricStatusReports")]
+    [JsonProperty("biometricStatusReports")]
     public BiometricStatusReport[] BiometricStatusReports { get; set; }
 
     /// <summary>
     /// Gets or sets an array of status reports applicable to this authenticator.
     /// </summary>
-    [JsonPropertyName("statusReports"), Required]
+    [JsonProperty("statusReports", Required = Required.Always)]
     public StatusReport[] StatusReports { get; set; }
 
     /// <summary>
     /// Gets or sets ISO-8601 formatted date since when the status report array was set to the current value. 
     /// </summary>
-    [JsonPropertyName("timeOfLastStatusChange")]
+    [JsonProperty("timeOfLastStatusChange")]
     public string TimeOfLastStatusChange { get; set; }
 
     /// <summary>
     /// Gets or sets an URL of a list of rogue (i.e. untrusted) individual authenticators. 
     /// </summary>
-    [JsonPropertyName("rogueListURL")]
+    [JsonProperty("rogueListURL")]
     public string RogueListURL { get; set; }
 
     /// <summary>
@@ -78,7 +77,7 @@ public sealed class MetadataBLOBPayloadEntry
     /// <remarks>
     /// This hash value must be present and non-empty whenever rogueListURL is present.
     /// </remarks>
-    [JsonPropertyName("rogueListHash")]
+    [JsonProperty("rogueListHash")]
     public string RogueListHash { get; set; }
 
     /// <summary>

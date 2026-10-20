@@ -67,8 +67,19 @@ public class MetadataServiceTests
                     AaGuid = Guid.Parse("6d44ba9b-f6ec-2e49-b930-0c8fe920cb73"),
                     MetadataStatement = new MetadataStatement
                     {
-                        Description = "Security Key by Yubico with NFC"
-                    }
+                        Description = "Security Key by Yubico with NFC",
+                        ProtocolFamily = "fido2",
+                        Upv = new UafVersion[] { new UafVersion(1,0) },
+                        AuthenticationAlgorithms = new[] {"-7"},
+                        PublicKeyAlgAndEncodings = new[] {"-8"},
+                        AttestationTypes = new[] { "TAG_ATTESTATION_BASIC_FULL" },
+                        UserVerificationDetails = new VerificationMethodDescriptor [][] { new[] { new VerificationMethodDescriptor() } },
+                        KeyProtection = new [] { "12345" },
+                        MatcherProtection = new [] { "12345" },
+                        TcDisplay = new [] { "12345" },
+                        AttestationRootCertificates = new[] { "12345" },
+                    },
+                        StatusReports = new[] { new StatusReport() { Status = AuthenticatorStatus.FIDO_CERTIFIED_L3plus } }
                 }
             }
             };

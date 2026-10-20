@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -14,20 +13,20 @@ public sealed class CodeAccuracyDescriptor
     /// <summary>
     /// Gets or sets the numeric system base (radix) of the code, e.g.  10 in the case of decimal digits. 
     /// </summary>
-    [JsonPropertyName("base"), Required]
+    [JsonProperty("base", Required = Required.Always)]
     public ushort Base { get; set; }
 
     /// <summary>
     /// Gets or sets the minimum number of digits of the given base required for that code, e.g. 4 in the case of 4 digits.
     /// </summary>
-    [JsonPropertyName("minLength"), Required]
+    [JsonProperty("minLength", Required = Required.Always)]
     public ushort MinLength { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum number of false attempts before the authenticator will block this method (at least for some time).
     /// <para>Zero (0) means it will never block.</para>
     /// </summary>
-    [JsonPropertyName("maxRetries")]
+    [JsonProperty("maxRetries")]
     public ushort MaxRetries { get; set; }
 
     /// <summary>
@@ -37,6 +36,6 @@ public sealed class CodeAccuracyDescriptor
     /// <remarks>
     /// All alternative user verification methods MUST be specified appropriately in the Metadata in <see cref="MetadataStatement.UserVerificationDetails"/>.
     /// </remarks>
-    [JsonPropertyName("blockSlowdown")]
+    [JsonProperty("blockSlowdown")]
     public ushort BlockSlowdown { get; set; }
 }

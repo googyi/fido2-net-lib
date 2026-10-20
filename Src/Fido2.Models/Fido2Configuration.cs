@@ -7,8 +7,8 @@ namespace Fido2NetLib;
 
 public class Fido2Configuration
 {
-    private IReadOnlySet<string> _origins;
-    private IReadOnlySet<string> _fullyQualifiedOrigins;
+    private IReadOnlyCollection<string> _origins;
+    private IReadOnlyCollection<string> _fullyQualifiedOrigins;
 
     /// <summary>
     /// Create the configuration for Fido2.
@@ -51,13 +51,13 @@ public class Fido2Configuration
     /// <summary>
     /// Server origins, including protocol host and port.
     /// </summary>
-    public IReadOnlySet<string> Origins
+    public IReadOnlyCollection<string> Origins
     {
         get
         {
             if (_origins == null)
             {
-                _origins = new HashSet<string>(0);
+                _origins = new HashSet<string>();
             }
 
             return _origins;
@@ -73,13 +73,13 @@ public class Fido2Configuration
     /// <summary>
     /// Fully Qualified Server origins, generated automatically from Origins.
     /// </summary>
-    public IReadOnlySet<string> FullyQualifiedOrigins
+    public IReadOnlyCollection<string> FullyQualifiedOrigins
     {
         get
         {
             if (_fullyQualifiedOrigins == null)
             {
-                Origins = new HashSet<string>(0);
+                Origins = new HashSet<string>();
             }
 
             return _fullyQualifiedOrigins;

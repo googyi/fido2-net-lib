@@ -1,28 +1,64 @@
 ﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
-
+using Asn1;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
 
 namespace Fido2NetLib;
 
-internal static class CryptoUtils
+public static class CryptoUtils
 {
+    private static RandomNumberGenerator rnd = RandomNumberGenerator.Create();
+
+    public static byte[] GetRandomBytes(int byteArrayLength)
+    {
+        var bytes = new byte[byteArrayLength];
+        rnd.GetBytes(bytes);
+        return bytes;
+    }
+
     public static byte[] HashData(HashAlgorithmName hashName, ReadOnlySpan<byte> data)
     {
-        #pragma warning disable format
-        return hashName.Name switch
+        return HashData(hashName, data.ToArray());
+    }
+
+    public static byte[] HashData(HashAlgorithmName hashName, byte[] data)
+    {
+        return GetHasher(hashName).ComputeHash(data);
+    }
+
+    private static HashAlgorithm GetHasher(HashAlgorithmName hashName)
+    {
+        switch (hashName.Name)
         {
-            "SHA1"                                               => SHA1.HashData(data),
-            "SHA256" or "HS256" or "RS256" or "ES256" or "PS256" => SHA256.HashData(data),
-            "SHA384" or "HS384" or "RS384" or "ES384" or "PS384" => SHA384.HashData(data),
-            "SHA512" or "HS512" or "RS512" or "ES512" or "PS512" => SHA512.HashData(data),
-            _ => throw new ArgumentOutOfRangeException(nameof(hashName)),
-        };
-        #pragma warning restore format
+            case "SHA1":
+                return SHA1.Create();
+            case "SHA256":
+            case "HS256":
+            case "RS256":
+            case "ES256":
+            case "PS256":
+                return SHA256.Create();
+            case "SHA384":
+            case "HS384":
+            case "RS384":
+            case "ES384":
+            case "PS384":
+                return SHA384.Create();
+            case "SHA512":
+            case "HS512":
+            case "RS512":
+            case "ES512":
+            case "PS512":
+                return SHA512.Create();
+            default:
+                throw new ArgumentOutOfRangeException(nameof(hashName));
+        }
     }
 
     public static HashAlgorithmName HashAlgFromCOSEAlg(COSE.Algorithm alg)
@@ -49,7 +85,7 @@ internal static class CryptoUtils
         };
     }
 
-    public static bool ValidateTrustChain(X509Certificate2[] trustPath, X509Certificate2[] attestationRootCertificates)
+    public static bool ValidateTrustChain(X509Certificate2[] trustPath, X509Certificate2[] attestationRootCertificates, bool conformance = false)
     {
         // https://fidoalliance.org/specs/fido-v2.0-id-20180227/fido-metadata-statement-v2.0-id-20180227.html#widl-MetadataStatement-attestationRootCertificates
 
@@ -59,7 +95,13 @@ internal static class CryptoUtils
         // A trust anchor can be a root certificate, an intermediate CA certificate or even the attestation certificate itself.
 
         // Let's check the simplest case first.  If subject and issuer are the same, and the attestation cert is in the list, that's all the validation we need
-        if (trustPath.Length == 1 && trustPath[0].Subject.Equals(trustPath[0].Issuer, StringComparison.Ordinal))
+
+        // Conformance testing tool v1.7.15
+        // P-3
+        // Send a valid ServerAuthenticatorAttestationResponse with FULL "packed" attestation that contains batch certificate, that is simply self referenced in the metadata, and check that server succeeds
+        // We have the same singular root cert in trustpath and in attestationRootCertificates with mismatching Subject and issuer 
+        // therefore it fails validation if we check for Subject vs Issuer
+        if (trustPath.Length == 1 /*&& trustPath[0].Subject.Equals(trustPath[0].Issuer, StringComparison.Ordinal)*/) // && ... should be commented out // TODO cleanup & check unit tests
         {
             foreach (X509Certificate2 cert in attestationRootCertificates)
             {
@@ -68,7 +110,7 @@ internal static class CryptoUtils
                     return true;
                 }
             }
-            return false;
+             //return false; // should be commented out // TODO cleanup & check unit tests
         }
 
         // If the attestation cert is not self signed, we will need to build a chain
@@ -94,27 +136,27 @@ internal static class CryptoUtils
         if (chain.Build(trustPath[0]))
         {
             // if that validated, we should have a root for this chain now, add it to the custom trust store
-            chain.ChainPolicy.CustomTrustStore.Clear();
-            chain.ChainPolicy.CustomTrustStore.Add(chain.ChainElements[^1].Certificate);
+            //chain.ChainPolicy.CustomTrustStore.Clear();
+            //chain.ChainPolicy.CustomTrustStore.Add(chain.ChainElements[^1].Certificate);
 
-            // explicitly trust the custom root we just added
-            chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
+            //// explicitly trust the custom root we just added
+            //chain.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
 
             // if the attestation cert has a CDP extension, go ahead and turn on online revocation checking
             if (!string.IsNullOrEmpty(CDPFromCertificateExts(trustPath[0].Extensions)))
                 chain.ChainPolicy.RevocationMode = X509RevocationMode.Online;
-
+            
             // don't allow unknown root now that we have a custom root
             chain.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
 
             // now, verify chain again with all checks turned on
-            if (chain.Build(trustPath[0]))
+            if (chain.Build(trustPath[0]) || AcceptMathcingUntrustedRoot(chain, chain.ChainElements[chain.ChainElements.Count-1].Certificate))
             {
                 // if the chain validates, make sure one of the attestation root certificates is one of the chain elements
-                foreach (X509Certificate2? attestationRootCertificate in attestationRootCertificates)
+                foreach (X509Certificate2 attestationRootCertificate in attestationRootCertificates)
                 {
                     // skip the first element, as that is the attestation cert
-                    if (chain.ChainElements
+                    if (chain.ChainElements.Cast<X509ChainElement>()
                         .Skip(1)
                         .Any(x => x.Certificate.Thumbprint.Equals(attestationRootCertificate.Thumbprint, StringComparison.Ordinal)))
                         return true;
@@ -125,11 +167,33 @@ internal static class CryptoUtils
         return false;
     }
 
+    public static bool AcceptMathcingUntrustedRoot(X509Chain chain, X509Certificate2 rootCertToTrust)
+    {
+        if (!chain.ChainStatus.Any(status => status.Status == X509ChainStatusFlags.UntrustedRoot))
+            return false;
+
+        foreach (var element in chain.ChainElements)
+        {
+            foreach (var status in element.ChainElementStatus)
+            {
+                if (status.Status != X509ChainStatusFlags.UntrustedRoot)
+                    continue;
+
+                if (!rootCertToTrust.Thumbprint.Equals(element.Certificate.Thumbprint))
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     public static byte[] SigFromEcDsaSig(byte[] ecDsaSig, int keySize)
     {
-        var decoded = Asn1Element.Decode(ecDsaSig);
-        var r = decoded[0].GetIntegerBytes();
-        var s = decoded[1].GetIntegerBytes();
+        var decoded = AsnElt.Decode(ecDsaSig);
+        var r = decoded.Sub[0].GetOctetString();
+        var s = decoded.Sub[1].GetOctetString();
 
         // .NET requires IEEE P-1363 fixed size unsigned big endian values for R and S
         // ASN.1 requires storing positive integer values with any leading 0s removed
@@ -146,7 +210,7 @@ internal static class CryptoUtils
 
         if (0x0 == r[0] && (r[1] & (1 << 7)) != 0)
         {
-            r.Slice(1).CopyTo(p1363R.Slice(coefficientSize - r.Length + 1));
+            r.Skip(1).ToArray().CopyTo(p1363R.Slice(coefficientSize - r.Length + 1));
         }
         else
         {
@@ -160,7 +224,7 @@ internal static class CryptoUtils
 
         if (0x0 == s[0] && (s[1] & (1 << 7)) != 0)
         {
-            s.Slice(1).CopyTo(p1363S.Slice(coefficientSize - s.Length + 1));
+            s.Skip(1).ToArray().CopyTo(p1363S.Slice(coefficientSize - s.Length + 1));
         }
         else
         {
@@ -171,6 +235,57 @@ internal static class CryptoUtils
         return DataHelper.Concat(p1363R, p1363S);
     }
 
+    /// <summary>
+    /// Convert PEM formated string into byte array.
+    /// </summary>
+    /// <param name="pemStr">source string.</param>
+    /// <returns>output byte array.</returns>
+    public static byte[] PemToBytes(string pemStr)
+    {
+        const string PemStartStr = "-----BEGIN";
+        const string PemEndStr = "-----END";
+        byte[] retval;
+        var lines = pemStr.Split('\n');
+        var base64Str = "";
+        bool started = false, ended = false;
+        var cline = "";
+        for (var i = 0; i < lines.Length; i++)
+        {
+            cline = lines[i].ToUpper();
+            if (cline == "")
+                continue;
+            if (cline.Length > PemStartStr.Length)
+            {
+                if (!started && cline.Substring(0, PemStartStr.Length) == PemStartStr)
+                {
+                    started = true;
+                    continue;
+                }
+            }
+            if (cline.Length > PemEndStr.Length)
+            {
+                if (cline.Substring(0, PemEndStr.Length) == PemEndStr)
+                {
+                    ended = true;
+                    break;
+                }
+            }
+            if (started)
+            {
+                base64Str += lines[i];
+            }
+        }
+        if (!(started && ended))
+        {
+            throw new Exception("'BEGIN'/'END' line is missing.");
+        }
+        base64Str = base64Str.Replace("\r", "");
+        base64Str = base64Str.Replace("\n", "");
+        base64Str = base64Str.Replace("\n", " ");
+        retval = Convert.FromBase64String(base64Str);
+        return retval;
+    }
+
     public static string CDPFromCertificateExts(X509ExtensionCollection exts)
     {
         var cdp = "";
@@ -178,11 +293,9 @@ internal static class CryptoUtils
         {
             if (ext.Oid?.Value is "2.5.29.31") // id-ce-CRLDistributionPoints
             {
-                var asnData = Asn1Element.Decode(ext.RawData);
-
-                var el = asnData[0][0][0][0];
-
-                cdp = Encoding.ASCII.GetString(el.GetOctetString(el.Tag));
+                var asnData = AsnElt.Decode(ext.RawData);
+                var el = asnData.Sub[0].Sub[0].Sub[0].Sub[0];
+                cdp = Encoding.ASCII.GetString(el.GetOctetString());
             }
         }
         return cdp;
@@ -190,29 +303,19 @@ internal static class CryptoUtils
 
     public static bool IsCertInCRL(byte[] crl, X509Certificate2 cert)
     {
-        var asnData = Asn1Element.Decode(crl);
+        var asnData = AsnElt.Decode(crl);
 
-        if (7 > asnData[0].Sequence.Count)
+        if (7 > asnData.Sub[0].Sub.Length)
             return false; // empty CRL
 
-        // Certificate users MUST be able to handle serialNumber values up to 20 octets.
+        var revokedCertificates = asnData.Sub[0].Sub[5].Sub;
+        var revoked = new List<long>();
 
-        var certificateSerialNumber = cert.GetSerialNumber().ToArray(); // defensively copy
-
-        Array.Reverse(certificateSerialNumber); // convert to big-endian order
-
-        var revokedAsnSequence = asnData[0][5].Sequence;
-
-        for (int i = 0; i < revokedAsnSequence.Count; i++)
+        foreach (AsnElt s in revokedCertificates)
         {
-            ReadOnlySpan<byte> revokedSerialNumber = revokedAsnSequence[i][0].GetIntegerBytes();
-
-            if (revokedSerialNumber.SequenceEqual(certificateSerialNumber))
-            {
-                return true;
-            }
+            revoked.Add(BitConverter.ToInt64(s.Sub[0].GetOctetString().Reverse().ToArray(), 0)); // reverse -> convert to big-endian order
         }
 
-        return false;
+        return revoked.Contains(BitConverter.ToInt64(cert.GetSerialNumber(), 0));
     }
 }

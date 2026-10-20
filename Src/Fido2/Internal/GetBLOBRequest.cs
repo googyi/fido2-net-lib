@@ -1,4 +1,5 @@
-﻿using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Serialization;
 
 namespace Fido2NetLib.Internal;
 
@@ -10,6 +11,6 @@ public readonly struct GetBLOBRequest
         Endpoint = endpoint;
     }
 
-    [JsonPropertyName("endpoint")]
+    [JsonProperty("endpoint")]
     public string Endpoint { get; }
 }

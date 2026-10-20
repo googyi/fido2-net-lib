@@ -5,9 +5,9 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Fido2NetLib.Cbor;
 using Fido2NetLib.Exceptions;
 using Fido2NetLib.Objects;
+using PeterO.Cbor;
 
 namespace Fido2NetLib;
 
@@ -40,10 +40,10 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         // 8. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure
         // to obtain the attestation statement format fmt, the authenticator data authData, and the attestation statement attStmt.
-        CborMap cborAttestation;
+        CBORObject cborAttestation;
         try
         {
-            cborAttestation = (CborMap)CborObject.Decode(rawResponse.Response.AttestationObject);
+            cborAttestation = CBORObject.DecodeFromBytes(rawResponse.Response.AttestationObject);
         }
         catch (Exception ex)
         {
@@ -59,7 +59,8 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         CredentialCreateOptions originalOptions,
         Fido2Configuration config,
         IsCredentialIdUniqueToUserAsyncDelegate isCredentialIdUniqueToUser,
-        IMetadataService? metadataService,
+        IMetadataService metadataService,
+        byte[] requestTokenBindingId,
         CancellationToken cancellationToken = default)
     {
         // https://www.w3.org/TR/webauthn/#registering-a-new-credential
@@ -74,7 +75,10 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         // 8. Verify that the value of C.challenge matches the challenge that was sent to the authenticator in the create() call.
         // 9. Verify that the value of C.origin matches the Relying Party's origin.
-        BaseVerify(config.FullyQualifiedOrigins, originalOptions.Challenge);
+        // 9.5. Verify that the value of C.tokenBinding.status matches the state of Token Binding for the TLS connection over which the attestation was obtained.If Token Binding was used on that TLS connection, also verify that C.tokenBinding.id matches the base64url encoding of the Token Binding ID for the connection.
+        // Validated in BaseVerify.
+        // todo: Needs testing
+        BaseVerify(config.FullyQualifiedOrigins, originalOptions.Challenge, requestTokenBindingId);
 
         if (Raw.Id is null || Raw.Id.Length == 0)
             throw new Fido2VerificationException(Fido2ErrorCode.InvalidAttestationResponse, Fido2ErrorMessages.AttestationResponseIdMissing);
@@ -85,8 +89,8 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         var authData = AttestationObject.AuthData;
 
         // 10. Let hash be the result of computing a hash over response.clientDataJSON using SHA-256.
-        byte[] clientDataHash = SHA256.HashData(Raw.Response.ClientDataJson);
-        byte[] rpIdHash = SHA256.HashData(Encoding.UTF8.GetBytes(originalOptions.Rp.Id));
+        byte[] clientDataHash = CryptoUtils.HashData(HashAlgorithmName.SHA256, Raw.Response.ClientDataJson);
+        byte[] rpIdHash = CryptoUtils.HashData(HashAlgorithmName.SHA256, Encoding.UTF8.GetBytes(originalOptions.Rp.Id));
 
         // 11. Perform CBOR decoding on the attestationObject field of the AuthenticatorAttestationResponse structure to obtain the attestation statement format fmt,
         //    the authenticator data authData, and the attestation statement attStmt.
@@ -121,7 +125,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         //     in the clientExtensionResults and the extensions in authData MUST be also be present as extension identifier values in the extensions member of options, i.e., 
         //     no extensions are present that were not requested. In the general case, the meaning of "are as expected" is specific to the Relying Party and which extensions are in use.
         // TODO?: Implement sort of like this: ClientExtensions.Keys.Any(x => options.extensions.contains(x);
-        byte[]? devicePublicKeyResult = null;
+        byte[] devicePublicKeyResult = null;
 
         if (Raw.Extensions?.DevicePubKey is not null)
         {
@@ -141,7 +145,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         //     for that attestation type and attestation statement format fmt, from a trusted source or from policy. 
         //     For example, the FIDO Metadata Service [FIDOMetadataService] provides one way to obtain such information, using the aaguid in the attestedCredentialData in authData.
 
-        MetadataBLOBPayloadEntry? metadataEntry = null;
+        MetadataBLOBPayloadEntry metadataEntry = null;
         if (metadataService != null)
             metadataEntry = await metadataService.GetEntryAsync(authData.AttestedCredentialData.AaGuid, cancellationToken);
 
@@ -149,7 +153,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         if (metadataService?.ConformanceTesting() is true && metadataEntry is null && attType != AttestationType.None && AttestationObject.Fmt is not "fido-u2f")
             throw new Fido2VerificationException(Fido2ErrorCode.AaGuidNotFound, "AAGUID not found in MDS test metadata");
 
-        TrustAnchor.Verify(metadataEntry, trustPath);
+        TrustAnchor.Verify(metadataEntry, trustPath, metadataService?.ConformanceTesting() is true);
 
         // 22. Assess the attestation trustworthiness using the outputs of the verification procedure in step 14, as follows:
         //     If self attestation was used, check if self attestation is acceptable under Relying Party policy.
@@ -186,7 +190,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         return new RegisteredPublicKeyCredential
         {
-            Type = Raw.Type,
+            Type = Raw.Type.Value,
             Id = authData.AttestedCredentialData.CredentialId,
             PublicKey = authData.AttestedCredentialData.CredentialPublicKey.GetBytes(),
             SignCount = authData.SignCount,
@@ -198,7 +202,8 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
             User = originalOptions.User,
             AttestationFormat = AttestationObject.Fmt,
             AaGuid = authData.AttestedCredentialData.AaGuid,
-            DevicePublicKey = devicePublicKeyResult
+            DevicePublicKey = devicePublicKeyResult,
+            MetadataEntry = metadataEntry
         };
     }
 
@@ -215,7 +220,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
     /// <see cref="https://w3c.github.io/webauthn/#sctn-device-publickey-extension-verification-create"/> 
     private async Task<byte[]> DevicePublicKeyRegistrationAsync(
         Fido2Configuration config,
-        IMetadataService? metadataService,
+        IMetadataService metadataService,
         AuthenticationExtensionsClientOutputs clientExtensionResults,
         AuthenticatorData authData,
         byte[] hash,
@@ -242,7 +247,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         // 5. Complete the steps from § 7.1 Registering a New Credential and, if those steps are successful,
         // store the aaguid, dpk, scope, fmt, attStmt values indexed to the credential.id in the user account.
-        MetadataBLOBPayloadEntry? metadataEntry = null;
+        MetadataBLOBPayloadEntry metadataEntry = null;
         if (metadataService != null)
             metadataEntry = await metadataService.GetEntryAsync(devicePublicKeyAuthenticatorOutput.AaGuid, cancellationToken);
 
@@ -250,7 +255,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
         if (metadataService?.ConformanceTesting() is true && metadataEntry is null && attType != AttestationType.None && devicePublicKeyAuthenticatorOutput.Fmt is not "fido-u2f")
             throw new Fido2VerificationException(Fido2ErrorCode.AaGuidNotFound, "AAGUID not found in MDS test metadata");
 
-        TrustAnchor.Verify(metadataEntry, trustPath);
+        TrustAnchor.Verify(metadataEntry, trustPath, metadataService?.ConformanceTesting() is true);
 
         // Check status reports for authenticator with undesirable status
         var latestStatusReport = metadataEntry?.GetLatestStatusReport();
@@ -267,7 +272,7 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
     /// </summary>
     public sealed class ParsedAttestationObject
     {
-        public ParsedAttestationObject(string fmt, CborMap attStmt, AuthenticatorData authData)
+        public ParsedAttestationObject(string fmt, CBORObject attStmt, AuthenticatorData authData)
         {
             Fmt = fmt;
             AttStmt = attStmt;
@@ -276,24 +281,26 @@ public sealed class AuthenticatorAttestationResponse : AuthenticatorResponse
 
         public string Fmt { get; }
 
-        public CborMap AttStmt { get; }
+        public CBORObject AttStmt { get; }
 
         public AuthenticatorData AuthData { get; }
 
-        internal static ParsedAttestationObject FromCbor(CborMap cbor)
+        internal static ParsedAttestationObject FromCbor(CBORObject cbor)
         {
-            if (!(
-                cbor["fmt"] is CborTextString fmt &&
-                cbor["attStmt"] is CborMap attStmt &&
-                cbor["authData"] is CborByteString authData))
+            if (  cbor["fmt"] == null
+               || cbor["fmt"].Type != CBORType.TextString
+               || cbor["attStmt"] == null
+               || cbor["attStmt"].Type != CBORType.Map
+               || cbor["authData"] == null
+               || cbor["authData"].Type != CBORType.ByteString)
             {
                 throw new Fido2VerificationException(Fido2ErrorCode.MalformedAttestationObject, Fido2ErrorMessages.MalformedAttestationObject);
             }
 
             return new ParsedAttestationObject(
-                fmt: fmt,
-                attStmt: attStmt,
-                authData: AuthenticatorData.Parse(authData)
+                fmt: cbor["fmt"].AsString(),
+                attStmt: cbor["attStmt"],
+                authData: AuthenticatorData.Parse(cbor["authData"].GetByteString())
             );
         }
     }

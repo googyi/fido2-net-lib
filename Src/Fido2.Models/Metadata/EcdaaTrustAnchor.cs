@@ -1,5 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -15,37 +14,37 @@ public sealed class EcdaaTrustAnchor
     /// <summary>
     /// Gets or sets a base64url encoding of the result of ECPoint2ToB of the ECPoint2 X=P2​x​​.
     /// </summary>
-    [JsonPropertyName("x"), Required]
+    [JsonProperty("x", Required = Required.Always)]
     public string X { get; set; }
 
     /// <summary>
     /// Gets or sets a base64url encoding of the result of ECPoint2ToB of the ECPoint2.
     /// </summary>
-    [JsonPropertyName("y"), Required]
+    [JsonProperty("y", Required = Required.Always)]
     public string Y { get; set; }
 
     /// <summary>
     /// Gets or sets a base64url encoding of the result of BigNumberToB(c).
     /// </summary>
-    [JsonPropertyName("c"), Required]
+    [JsonProperty("c", Required = Required.Always)]
     public string C { get; set; }
 
     /// <summary>
     /// Gets or sets the base64url encoding of the result of BigNumberToB(sx).
     /// </summary>
-    [JsonPropertyName("sx"), Required]
+    [JsonProperty("sx", Required = Required.Always)]
     public string SX { get; set; }
 
     /// <summary>
     /// Gets or sets the base64url encoding of the result of BigNumberToB(sy).
     /// </summary>
-    [JsonPropertyName("sy"), Required]
+    [JsonProperty("sy", Required = Required.Always)]
     public string SY { get; set; }
 
     /// <summary>
     /// Gets or sets a name of the Barreto-Naehrig elliptic curve for G1.
     /// <para>"BN_P256", "BN_P638", "BN_ISOP256", and "BN_ISOP512" are supported.</para>
     /// </summary>
-    [JsonPropertyName("G1Curve"), Required]
+    [JsonProperty("G1Curve", Required = Required.Always)]
     public string G1Curve { get; set; }
 }

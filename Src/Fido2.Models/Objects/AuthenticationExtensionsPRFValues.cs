@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib.Objects;
 
@@ -10,15 +10,14 @@ public sealed class AuthenticationExtensionsPRFValues
     /// <summary>
     /// salt1 value to the PRF evaluation.
     /// </summary>
-    [JsonPropertyName("first")]
+    [JsonProperty("first")]
     [JsonConverter(typeof(Base64UrlConverter))]
     public byte[] First { get; set; }
     /// <summary>
     /// salt2 value to the PRF evaluation.
     /// </summary>
-    [JsonPropertyName("second")]
+    [JsonProperty("second", NullValueHandling = NullValueHandling.Ignore)]
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public byte[] Second { get; set; }
 }
 

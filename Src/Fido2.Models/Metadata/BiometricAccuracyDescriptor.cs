@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+﻿using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -17,14 +17,14 @@ public sealed class BiometricAccuracyDescriptor
     /// <remarks>
     ///  [ISO19795-1] for a single template, i.e. the percentage of verification transactions with truthful claims of identity that are incorrectly denied. 
     /// </remarks>
-    [JsonPropertyName("selfAttestedFRR")]
+    [JsonProperty("selfAttestedFRR")]
     public double SelfAttestedFRR { get; set; }
 
     /// <summary>
     /// Gets or sets the false acceptance rate.
     /// <para>For example a FAR of 0.002% would be encoded as 0.00002.</para>
     /// </summary>
-    [JsonPropertyName("selfAttestedFAR")]
+    [JsonProperty("selfAttestedFAR")]
     public double SelfAttestedFAR { get; set; }
 
     /// <summary>
@@ -34,14 +34,14 @@ public sealed class BiometricAccuracyDescriptor
     /// For other modalities, multiple parts of the body that can be used interchangeably.
     /// For example: 3 if the user is allowed to enroll up to 3 different fingers to a fingerprint based authenticator. 
     /// </remarks>
-    [JsonPropertyName("maxTemplates")]
+    [JsonProperty("maxTemplates")]
     public ushort MaxTemplates { get; set; }
 
     /// <summary>
     /// Gets or sets the maximum number of false attempts before the authenticator will block this method (at least for some time).
     /// <para>Zero (0) means it will never block.</para>
     /// </summary>
-    [JsonPropertyName("maxRetries")]
+    [JsonProperty("maxRetries")]
     public ushort MaxRetries { get; set; }
 
     /// <summary>
@@ -51,6 +51,6 @@ public sealed class BiometricAccuracyDescriptor
     /// <remarks>
     /// All alternative user verification methods MUST be specified appropriately in the metadata in <see cref="MetadataStatement.UserVerificationDetails"/>.
     /// </remarks>
-    [JsonPropertyName("blockSlowdown")]
+    [JsonProperty("blockSlowdown")]
     public ushort BlockSlowdown { get; set; }
 }

@@ -1,7 +1,7 @@
 ﻿#nullable enable
 
 using System;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib.Objects;
 
@@ -18,7 +18,8 @@ public sealed class PublicKeyCredentialDescriptor
     [JsonConstructor]
     public PublicKeyCredentialDescriptor(PublicKeyCredentialType type, byte[] id, AuthenticatorTransport[]? transports = null)
     {
-        ArgumentNullException.ThrowIfNull(id);
+        if (id == null)
+            throw new ArgumentNullException(nameof(id));        
 
         Type = type;
         Id = id;
@@ -28,20 +29,19 @@ public sealed class PublicKeyCredentialDescriptor
     /// <summary>
     /// This member contains the type of the public key credential the caller is referring to.
     /// </summary>
-    [JsonPropertyName("type")]
+    [JsonProperty("type")]
     public PublicKeyCredentialType Type { get; }
 
     /// <summary>
     /// This member contains the credential ID of the public key credential the caller is referring to.
     /// </summary>
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonPropertyName("id")]
+    [JsonProperty("id")]
     public byte[] Id { get; }
 
     /// <summary>
     /// This OPTIONAL member contains a hint as to how the client might communicate with the managing authenticator of the public key credential the caller is referring to.
     /// </summary>
-    [JsonPropertyName("transports")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("transports", NullValueHandling = NullValueHandling.Ignore)]
     public AuthenticatorTransport[]? Transports { get; }
 };

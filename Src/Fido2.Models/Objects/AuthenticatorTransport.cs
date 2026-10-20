@@ -1,5 +1,6 @@
 ﻿using System.Runtime.Serialization;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace Fido2NetLib.Objects;
 
@@ -11,7 +12,7 @@ namespace Fido2NetLib.Objects;
 /// A Relying Party will typically learn of the supported transports for a public key credential via getTransports().
 /// https://www.w3.org/TR/webauthn-2/#enum-transport
 /// </summary>
-[JsonConverter(typeof(FidoEnumConverter<AuthenticatorTransport>))]
+[JsonConverter(typeof(StringEnumConverter))]
 public enum AuthenticatorTransport
 {
     /// <summary>

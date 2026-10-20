@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib;
 
@@ -21,13 +21,13 @@ public readonly struct UafVersion : IEquatable<UafVersion>
     /// <summary>
     /// Major version
     /// </summary>
-    [JsonPropertyName("major")]
+    [JsonProperty("major")]
     public ushort Major { get; }
 
     /// <summary>
     /// Minor version
     /// </summary>
-    [JsonPropertyName("minor")]
+    [JsonProperty("minor")]
     public ushort Minor { get; }
 
     public bool Equals(UafVersion other)

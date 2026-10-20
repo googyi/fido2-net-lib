@@ -2,7 +2,7 @@
 
 namespace Fido2NetLib.Objects;
 
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 public sealed class AuthenticationExtensionsDevicePublicKeyOutputs
 {
@@ -14,10 +14,10 @@ public sealed class AuthenticationExtensionsDevicePublicKeyOutputs
     }
 
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonPropertyName("authenticatorOutput")]
+    [JsonProperty("authenticatorOutput")]
     public byte[] AuthenticatorOutput { get; }
 
     [JsonConverter(typeof(Base64UrlConverter))]
-    [JsonPropertyName("signature")]
+    [JsonProperty("signature")]
     public byte[] Signature { get; }
 }

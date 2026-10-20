@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using System.Text.Json.Serialization;
+using Newtonsoft.Json;
 
 namespace Fido2NetLib.Objects;
 
@@ -12,13 +12,12 @@ public sealed class AuthenticationExtensionsPRFInputs
     /// Inputs on which to evaluate PRF.
     /// https://w3c.github.io/webauthn/#dom-authenticationextensionsprfinputs-eval
     /// </summary>
-    [JsonPropertyName("eval")]
+    [JsonProperty("eval")]
     public AuthenticationExtensionsPRFValues Eval { get; set; }
     /// <summary>
     /// A record mapping base64url encoded credential IDs to PRF inputs to evaluate for that credential.
     /// https://w3c.github.io/webauthn/#dom-authenticationextensionsprfinputs-evalbycredential
     /// </summary>
-    [JsonPropertyName("evalByCredential")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    [JsonProperty("evalByCredential", NullValueHandling = NullValueHandling.Ignore)]
     public KeyValuePair<string, AuthenticationExtensionsPRFValues>? EvalByCredential { get; set; }
 }

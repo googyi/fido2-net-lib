@@ -1,4 +1,5 @@
-﻿using System.Security.Cryptography;
+﻿using System.Runtime.InteropServices;
+using System.Security.Cryptography;
 
 using Fido2NetLib;
 using Fido2NetLib.Objects;
@@ -14,12 +15,12 @@ public class CredentialPublicKeyTests
     [InlineData("1.3.132.0.35", COSE.Algorithm.ES512)]  // P512
     public void CanUseECCurves(string oid, COSE.Algorithm alg)
     {
-        if (OperatingSystem.IsMacOS() && alg is COSE.Algorithm.ES256K)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX) && alg is COSE.Algorithm.ES256K)
         {
             return;
         }
 
-        byte[] signedData = RandomNumberGenerator.GetBytes(64);
+        byte[] signedData = CryptoUtils.GetRandomBytes(64);
 
         using var ecDsa = ECDsa.Create(ECCurve.CreateFromValue(oid));
 
