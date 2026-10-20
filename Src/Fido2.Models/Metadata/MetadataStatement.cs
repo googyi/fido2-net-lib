@@ -103,7 +103,7 @@ public class MetadataStatement
     /// <summary>
     /// Gets or sets a list of alternative VerificationMethodANDCombinations.
     /// </summary>
-    [JsonProperty("userVerificationDetails", Required = Required.Always)]
+    [JsonProperty("userVerificationDetails")]
     public VerificationMethodDescriptor[][] UserVerificationDetails { get; set; }
 
     /// <summary>
