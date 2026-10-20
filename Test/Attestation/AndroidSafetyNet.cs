@@ -78,7 +78,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             };
 
             JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-            securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+            securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
             string strToken = "";
             if (tokenHandler.CanWriteToken)
@@ -165,7 +165,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
             };
 
             JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-            securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+            securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
             string strToken = "";
             if (tokenHandler.CanWriteToken)
@@ -399,7 +399,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -475,7 +475,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -551,7 +551,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -627,7 +627,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -711,7 +711,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -793,7 +793,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -872,7 +872,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -956,7 +956,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
@@ -1032,7 +1032,7 @@ public class AndroidSafetyNet : Fido2Tests.Attestation
                 };
 
                 JwtSecurityToken securityToken = (JwtSecurityToken)tokenHandler.CreateToken(tokenDescriptor);
-                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { Convert.ToBase64String(attestnCert.RawData), Convert.ToBase64String(root.RawData) });
+                securityToken.Header.Add(JwtHeaderParameterNames.X5c, new[] { attestnCert.RawData, root.RawData });
 
                 string strToken = "";
                 if (tokenHandler.CanWriteToken)
